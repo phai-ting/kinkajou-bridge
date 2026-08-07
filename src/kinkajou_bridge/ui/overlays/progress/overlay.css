@@ -6,6 +6,7 @@ html[data-theme="dark"] {
   --border: rgba(168, 200, 239, 0.28);
   --accent: #4f8fd9;
   --accent-start: #3a6fa8;
+  --ok: #7ddea2;
   --bad: #f0a090;
   --bar-track: rgba(255, 255, 255, 0.12);
   --error-bg: rgba(40, 16, 12, 0.75);
@@ -20,6 +21,7 @@ html[data-theme="light"] {
   --border: rgba(39, 49, 64, 0.18);
   --accent: #2f6cb5;
   --accent-start: #3a78c2;
+  --ok: #1f8a55;
   --bad: #c04538;
   --bar-track: rgba(15, 18, 24, 0.12);
   --error-bg: rgba(255, 236, 232, 0.95);
@@ -86,7 +88,15 @@ html, body {
   width: 0%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--accent-start), var(--accent));
-  transition: width 0.35s ease;
+  transition: width 0.35s ease, background 0.35s ease;
+}
+
+.card[data-state="complete"] .fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ok) 70%, #1a5c3a), var(--ok));
+}
+
+.card[data-state="complete"] .pct {
+  color: var(--ok);
 }
 
 .error {

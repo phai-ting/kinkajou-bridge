@@ -104,7 +104,15 @@ html, body {
   width: 0%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--accent-start), var(--accent));
-  transition: width 0.35s ease;
+  transition: width 0.35s ease, background 0.35s ease;
+}
+
+.strip[data-state="complete"] .fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ok) 70%, #1a5c3a), var(--ok));
+}
+
+.strip[data-state="complete"] #pct {
+  color: var(--ok);
 }
 
 .bottom {

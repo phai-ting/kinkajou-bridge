@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from typing import Any
@@ -16,6 +17,8 @@ from kinkajou_bridge.plugins.base import VerifyResult
 from kinkajou_bridge.streamerbot.client import StreamerBotClient
 
 logger = logging.getLogger(__name__)
+
+RECONNECT_INTERVAL_SECONDS = 30.0
 
 
 class StreamerBotPlugin:
@@ -78,8 +81,11 @@ class StreamerBotPlugin:
         ],
     )
 
-    def __init__(self) -> None:
+    def __init__(self, *, reconnect_interval_seconds: float = RECONNECT_INTERVAL_SECONDS) -> None:
         self._client: StreamerBotClient | None = None
+        self._config: dict[str, Any] | None = None
+        self._reconnect_interval = reconnect_interval_seconds
+        self._reconnect_task: asyncio.Task[None] | None = None
         self._status = IntegrationStatus(
             integration_id="unassigned",
             integration_name="Streamer.bot",
@@ -103,52 +109,15 @@ class StreamerBotPlugin:
         )
 
     async def connect(self, config: Mapping[str, Any]) -> None:
-        name = "Streamer.bot"
-        host = str(config.get("host") or "127.0.0.1").strip()
-        port = int(config.get("port") or 8080)
-        endpoint = str(config.get("endpoint") or "/")
-        password = str(config.get("password") or "").strip() or None
-        self._status = IntegrationStatus(
-            integration_id=self.id,
-            integration_name=name,
-            plugin_id=self.id,
-            connection=ConnectionState.CONNECTING,
-            message=f"Connecting to ws://{host}:{port}{endpoint}…",
-        )
-        client = StreamerBotClient(
-            host=host,
-            port=port,
-            endpoint=endpoint,
-            password=password,
-        )
-        try:
-            await client.connect()
-        except Exception as exc:
-            logger.warning("Streamer.bot connect failed: %s", exc)
-            self._client = None
-            self._status = self._status.model_copy(
-                update={
-                    "connection": ConnectionState.ERROR,
-                    "message": (
-                        f"Could not connect to Streamer.bot at {client.url}: {exc}. "
-                        "Bridge will keep the integration; start Streamer.bot and restart "
-                        "Bridge or re-save to retry."
-                    ),
-                }
-            )
-            return
-        self._client = client
-        self._status = self._status.model_copy(
-            update={
-                "connection": ConnectionState.CONNECTED,
-                "message": (
-                    f"Connected to {client.url}. Events from all printers "
-                    "(every service and standalone host) forward as Kinkajou.* actions."
-                ),
-            }
-        )
+        await self._cancel_reconnect()
+        self._config = dict(config)
+        await self._connect_once()
+        if self._client is None and self._config is not None:
+            self._start_reconnect_loop()
 
     async def disconnect(self) -> None:
+        self._config = None
+        await self._cancel_reconnect()
         if self._client is not None:
             await self._client.close()
             self._client = None
@@ -185,3 +154,86 @@ class StreamerBotPlugin:
                     "message": f"Failed to send DoAction {action_name}",
                 }
             )
+
+    async def _connect_once(self) -> None:
+        config = self._config
+        if config is None:
+            return
+
+        name = str(config.get("name") or "Streamer.bot")
+        host = str(config.get("host") or "127.0.0.1").strip()
+        port = int(config.get("port") or 8080)
+        endpoint = str(config.get("endpoint") or "/")
+        password = str(config.get("password") or "").strip() or None
+        self._status = IntegrationStatus(
+            integration_id=self.id,
+            integration_name=name,
+            plugin_id=self.id,
+            connection=ConnectionState.CONNECTING,
+            message=f"Connecting to ws://{host}:{port}{endpoint}…",
+        )
+        client = StreamerBotClient(
+            host=host,
+            port=port,
+            endpoint=endpoint,
+            password=password,
+        )
+        try:
+            await client.connect()
+        except Exception as exc:
+            logger.warning("Streamer.bot connect failed: %s", exc)
+            self._client = None
+            interval = int(self._reconnect_interval)
+            self._status = self._status.model_copy(
+                update={
+                    "connection": ConnectionState.ERROR,
+                    "message": (
+                        f"Could not connect to Streamer.bot at {client.url}: {exc}. "
+                        f"Retrying every {interval}s until connected."
+                    ),
+                }
+            )
+            return
+        self._client = client
+        self._status = self._status.model_copy(
+            update={
+                "connection": ConnectionState.CONNECTED,
+                "message": (
+                    f"Connected to {client.url}. Events from all printers "
+                    "(every service and standalone host) forward as Kinkajou.* actions."
+                ),
+            }
+        )
+
+    def _start_reconnect_loop(self) -> None:
+        if self._reconnect_task is not None and not self._reconnect_task.done():
+            return
+        self._reconnect_task = asyncio.create_task(
+            self._reconnect_loop(),
+            name="streamerbot-reconnect",
+        )
+
+    async def _reconnect_loop(self) -> None:
+        while self._config is not None and self._client is None:
+            try:
+                await asyncio.sleep(self._reconnect_interval)
+            except asyncio.CancelledError:
+                raise
+            if self._config is None or self._client is not None:
+                return
+            logger.info(
+                "Retrying Streamer.bot connection (every %ss)…",
+                self._reconnect_interval,
+            )
+            await self._connect_once()
+
+    async def _cancel_reconnect(self) -> None:
+        task = self._reconnect_task
+        self._reconnect_task = None
+        if task is None:
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass

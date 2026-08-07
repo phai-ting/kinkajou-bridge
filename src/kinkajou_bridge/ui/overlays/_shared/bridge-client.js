@@ -116,17 +116,22 @@
       elapsed = Math.max(0, Math.round(elapsedAnchor.elapsed + drift));
     }
 
-    if (total == null && elapsed != null && remaining != null) {
+    if (total == null && elapsed != null && remaining != null && remaining > 0) {
       total = elapsed + remaining;
     }
     if (
       total == null &&
       remaining != null &&
+      remaining > 0 &&
       progress != null &&
       progress > 0 &&
       progress < 100
     ) {
       total = Math.round(remaining / (1 - progress / 100));
+    }
+    // Don't let a 0 remaining + high progress wipe the estimate to 0s.
+    if (total === 0 && progress != null && progress < 100) {
+      total = null;
     }
     if (elapsed == null && total != null && remaining != null) {
       elapsed = Math.max(0, total - remaining);
@@ -204,6 +209,7 @@
     let tickTimer = null;
     let reconnectTimer = null;
     let refreshTimer = null;
+    let pollTimer = null;
 
     function markUnreachable() {
       bridgeReachable = false;
@@ -263,11 +269,15 @@
           return;
         }
         printer = resolved;
-        const next =
-          resolved.status && resolved.status.job
-            ? resolved.status
-            : await getStatus(resolved.id);
-        setStatus(next || {});
+        // Prefer dedicated status fetch so progress isn't stale from a cached list row.
+        let next = null;
+        try {
+          next = await getStatus(resolved.id);
+        } catch {
+          next = null;
+        }
+        if (!next) next = resolved.status || {};
+        setStatus(next);
       } catch (err) {
         markUnreachable();
         // First load: surface the hard error. After that, keep last UI with "unreachable".
@@ -336,10 +346,15 @@
     refresh();
     connectWs();
     tickTimer = setInterval(emit, 1000);
+    // HTTP poll so progress keeps moving even if WS events are sparse.
+    pollTimer = setInterval(() => {
+      if (!closed) refresh();
+    }, Math.max(2000, intervalMs()));
 
     return function stop() {
       closed = true;
       if (tickTimer != null) clearInterval(tickTimer);
+      if (pollTimer != null) clearInterval(pollTimer);
       if (reconnectTimer != null) clearTimeout(reconnectTimer);
       if (refreshTimer != null) clearTimeout(refreshTimer);
       if (ws) {

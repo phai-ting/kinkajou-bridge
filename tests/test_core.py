@@ -4,70 +4,7 @@ import pytest
 
 from kinkajou_bridge.models import FieldType
 from kinkajou_bridge.plugins.bambu import BambuCloudService, BambuPlugin
-from kinkajou_bridge.plugins.octoprint import OctoPrintPlugin
 from kinkajou_bridge.plugins.registry import PrinterRegistry, ServiceRegistry
-
-
-@pytest.mark.asyncio
-async def test_octoprint_verify_and_connect() -> None:
-    plugin = OctoPrintPlugin()
-    assert plugin.supports_standalone is True
-    assert list(plugin.compatible_service_ids) == []
-    bad = await plugin.verify({"name": "OP", "base_url": "not-a-url"})
-    assert bad.ok is False
-    ok = await plugin.verify(
-        {
-            "name": "Workshop",
-            "base_url": "http://192.168.1.40",
-            "api_key": "abc123",
-        }
-    )
-    assert ok.ok is True
-    await plugin.connect(
-        {
-            "name": "Workshop",
-            "base_url": "http://192.168.1.40",
-            "api_key": "abc123",
-            "stream_url": "http://192.168.1.40/webcam/?action=stream",
-            "connection_mode": "lan",
-        }
-    )
-    status = plugin.get_status()
-    assert status.printer_name == "Workshop"
-    assert status.connection.value == "connected"
-    assert status.stream.available is True
-
-    registry = PrinterRegistry()
-    registry.load_builtins([("bambu", BambuPlugin), ("octoprint", OctoPrintPlugin)])
-    assert "octoprint" in registry.list_ids()
-    assert registry.create("octoprint").config_schema.fields[0].type == FieldType.STRING
-
-
-@pytest.mark.asyncio
-async def test_bridge_add_octoprint(tmp_path) -> None:
-    from kinkajou_bridge.app import BridgeApp
-    from kinkajou_bridge.settings import Settings
-
-    settings = Settings(data_dir=tmp_path)
-    bridge = BridgeApp(settings)
-    await bridge.start()
-    try:
-        instance = await bridge.add_printer(
-            name="Octo",
-            plugin_id="octoprint",
-            config={
-                "connection_mode": "lan",
-                "name": "Octo",
-                "base_url": "http://192.168.1.40",
-                "api_key": "secret-key",
-            },
-        )
-        public = bridge.public_printer(instance)
-        assert public["config"]["api_key"] == "***"
-        summaries = bridge.list_printer_summaries()
-        assert summaries[0]["identity"]["host"] == "http://192.168.1.40"
-    finally:
-        await bridge.stop()
 
 
 @pytest.mark.asyncio
@@ -119,6 +56,8 @@ async def test_bambu_verify_service_with_injected_config() -> None:
 
 @pytest.mark.asyncio
 async def test_bambu_connect_sets_status() -> None:
+    import asyncio
+
     plugin = BambuPlugin()
     await plugin.connect(
         {
@@ -129,12 +68,20 @@ async def test_bambu_connect_sets_status() -> None:
             "name": "Living Room",
         }
     )
-    status = plugin.get_status()
-    assert status.printer_name == "Living Room"
-    assert status.connection.value == "connected"
-    events = [event async for event in plugin.events()]
-    assert events
-    assert events[0].type.value == "printer.connected"
+    try:
+        status = plugin.get_status()
+        assert status.printer_name == "Living Room"
+        assert status.connection.value == "connected"
+        assert status.print_state.value == "idle"
+
+        async def first_event():
+            async for event in plugin.events():
+                return event
+
+        event = await asyncio.wait_for(first_event(), timeout=2)
+        assert event.type.value == "printer.connected"
+    finally:
+        await plugin.disconnect()
 
 
 @pytest.mark.asyncio
@@ -325,10 +272,13 @@ async def test_legacy_cloud_token_migration(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_streamerbot_integration_and_event_fanout(tmp_path) -> None:
+async def test_streamerbot_integration_and_event_fanout(tmp_path, monkeypatch) -> None:
     from kinkajou_bridge.app import BridgeApp
     from kinkajou_bridge.models import EventType, PrinterEvent
     from kinkajou_bridge.settings import Settings
+    from tests.test_octoprint import _mock_transport, _patch_async_client
+
+    _patch_async_client(monkeypatch, _mock_transport())
 
     settings = Settings(data_dir=tmp_path)
     bridge = BridgeApp(settings)

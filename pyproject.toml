@@ -17,6 +17,7 @@ dependencies = [
     "curl-cffi>=0.7.0",
     "pystray>=0.19.5",
     "pillow>=11.0.0",
+    "aiomqtt>=2.3.0",
 ]
 
 [project.optional-dependencies]

@@ -43,6 +43,7 @@
     connectionEl.textContent = connection;
     stateEl.className = `badge ${KinkajouBridge.printStateClass(printState)}`;
     stateEl.textContent = printState;
+    root.dataset.state = String(printState).toLowerCase();
 
     jobEl.textContent = job.name || printState;
 

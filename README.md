@@ -10,7 +10,7 @@ Documentation: https://kinkajou.dev/bridge/
 Early scaffold:
 
 - Service, printer, and integration plugin contracts (entry points supported)
-- Built-in Bambu Lab cloud service + printer stubs; OctoPrint printer stub; Streamer.bot integration
+- Built-in Bambu Lab cloud service + printer (MQTT); OctoPrint printer (REST polling); Streamer.bot integration
 - Local HTTP API (`/v1/...`) and event WebSocket
 - Tray mode by default; `--service` for headless API-only
 

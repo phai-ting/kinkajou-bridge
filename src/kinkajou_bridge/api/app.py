@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from kinkajou_bridge.app import BridgeApp
 from kinkajou_bridge.models import DiscoveredDevice, IntegrationStatus, PrinterStatus, ServiceStatus
 from kinkajou_bridge.ui.browser import open_url_when_ready
+from kinkajou_bridge.ui.custom_overlays import ensure_custom_overlays_dir
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ def _overlays_root() -> Path:
 def create_api(bridge: BridgeApp) -> FastAPI:
     ui_root = _ui_root()
     overlays_root = _overlays_root()
+    custom_overlays_root = ensure_custom_overlays_dir(bridge.settings.custom_overlays_path)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -63,6 +65,14 @@ def create_api(bridge: BridgeApp) -> FastAPI:
 
     if ui_root.exists():
         api.mount("/ui/static", StaticFiles(directory=ui_root), name="ui-static")
+
+    # User-writable custom overlays (~/.kinkajou-bridge/overlays/custom).
+    # Mount before built-ins so /bridge/custom/* is not shadowed.
+    api.mount(
+        "/bridge/custom",
+        StaticFiles(directory=custom_overlays_root, html=True),
+        name="overlays-custom",
+    )
 
     # Same-origin OBS overlays (avoids Chromium "local network / other apps" prompts
     # that appear when a remote page calls http://127.0.0.1).

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import sys
 
@@ -9,7 +10,15 @@ import uvicorn
 from kinkajou_bridge import __version__
 from kinkajou_bridge.api import create_api
 from kinkajou_bridge.app import BridgeApp
+from kinkajou_bridge.asyncio_loop import uvicorn_loop_setting
 from kinkajou_bridge.settings import Settings
+from kinkajou_bridge.single_instance import acquire_single_instance
+
+
+def _configure_asyncio() -> None:
+    """Prefer Selector on Windows so aiomqtt can use add_reader before uvicorn starts."""
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _configure_asyncio()
     args = build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.INFO,
@@ -57,10 +67,27 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_service_cli()
 
+    # One Bridge process per machine/user session (skip for --windows-service above).
+    instance_lock = acquire_single_instance(settings.data_dir)
+    if instance_lock is None:
+        logging.getLogger(__name__).info(
+            "Kinkajou Bridge is already running — opening the existing UI."
+        )
+        from kinkajou_bridge.ui.browser import open_url
+
+        open_url(settings.dashboard_url)
+        return 0
+
     if args.service:
         bridge = BridgeApp(settings)
         api = create_api(bridge)
-        uvicorn.run(api, host=settings.host, port=settings.port, log_level="info")
+        uvicorn.run(
+            api,
+            host=settings.host,
+            port=settings.port,
+            log_level="info",
+            loop=uvicorn_loop_setting(),
+        )
         return 0
 
     from kinkajou_bridge.ui.tray import run_tray

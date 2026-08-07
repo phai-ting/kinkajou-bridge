@@ -132,6 +132,46 @@ def _get_json(url: str, headers: dict[str, str], *, timeout: float) -> Any:
     raise RuntimeError("Bambu cloud request failed with no attempts available")
 
 
+def fetch_user_id(
+    cloud_token: str,
+    *,
+    region: str | None = None,
+    timeout: float = 20.0,
+) -> str:
+    """Return the numeric Bambu cloud user id used for MQTT username ``u_{id}``."""
+    token = normalize_cloud_token(cloud_token)
+    if not token:
+        raise ValueError("Cloud access token is required.")
+
+    url = f"{bambu_api_base(region)}/v1/design-user-service/my/preference"
+    headers = studio_headers(token)
+    payload = _get_json(url, headers, timeout=timeout)
+    if not isinstance(payload, dict):
+        raise RuntimeError("Bambu preference response was not a JSON object.")
+
+    uid = payload.get("uid")
+    if uid is None:
+        uid = payload.get("user_id")
+    if uid is None:
+        raise RuntimeError("Bambu preference response did not include a user id.")
+    return str(uid).strip()
+
+
+def cloud_mqtt_username(user_id: str) -> str:
+    """Format the cloud MQTT username (``u_<uid>``)."""
+    value = str(user_id).strip()
+    if value.lower().startswith("u_"):
+        return value
+    return f"u_{value}"
+
+
+def mqtt_broker_for_region(region: str | None = None) -> str:
+    value = (region or "global").strip().lower()
+    if value in {"cn", "china", "zh"}:
+        return "cn.mqtt.bambulab.com"
+    return "us.mqtt.bambulab.com"
+
+
 def fetch_bound_devices(
     cloud_token: str,
     *,

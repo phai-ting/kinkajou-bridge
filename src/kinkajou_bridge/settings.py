@@ -43,6 +43,11 @@ class Settings(BaseSettings):
         return self.data_dir / "ui_state.json"
 
     @property
+    def custom_overlays_path(self) -> Path:
+        """User-writable overlays served at ``/bridge/custom/``."""
+        return self.data_dir / "overlays" / "custom"
+
+    @property
     def base_url(self) -> str:
         return f"http://{self.host}:{self.port}"
 

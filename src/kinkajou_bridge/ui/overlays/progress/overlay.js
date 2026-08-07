@@ -32,9 +32,11 @@
       const status = printer.status || (await KinkajouBridge.getStatus(printer.id)) || {};
       const job = status.job || {};
       const progress = job.progress != null ? Number(job.progress) : null;
+      const printState = String(status.print_state || "unknown").toLowerCase();
 
       root.hidden = false;
       errorEl.hidden = true;
+      root.dataset.state = printState;
       nameEl.textContent = printer.name || "Printer";
       jobEl.textContent = job.name || status.print_state || "Idle";
       if (progress == null || Number.isNaN(progress)) {

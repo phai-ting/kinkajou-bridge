@@ -30,6 +30,7 @@ from kinkajou_bridge.storage import (
     ServiceInstance,
     ServiceStore,
 )
+from kinkajou_bridge.ui.custom_overlays import ensure_custom_overlays_dir
 from kinkajou_bridge.ui.state import UiStateStore
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,7 @@ class BridgeApp:
         if self._started:
             return
         self.settings.data_dir.mkdir(parents=True, exist_ok=True)
+        ensure_custom_overlays_dir(self.settings.custom_overlays_path)
         self.ui_state.load()
         self.service_registry.load_builtins([("bambu_cloud", BambuCloudService)])
         self.printer_registry.load_builtins(
@@ -127,6 +129,7 @@ class BridgeApp:
             "overlays_docs_url": (
                 f"{self.settings.website_url.rstrip('/')}/bridge/user/overlays/"
             ),
+            "custom_overlays_path": str(self.settings.custom_overlays_path),
             "api_base_url": self.settings.base_url,
         }
 

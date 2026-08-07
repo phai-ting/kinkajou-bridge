@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 import threading
 from typing import Any
+from urllib.parse import quote
 
 import uvicorn
 
 from kinkajou_bridge.api import create_api
 from kinkajou_bridge.app import BridgeApp
+from kinkajou_bridge.asyncio_loop import uvicorn_loop_setting
 from kinkajou_bridge.settings import Settings
 from kinkajou_bridge.ui.browser import open_url
 
@@ -27,7 +29,13 @@ def run_tray(settings: Settings) -> int:
     bridge = BridgeApp(settings)
     api = create_api(bridge)
     server = uvicorn.Server(
-        uvicorn.Config(api, host=settings.host, port=settings.port, log_level="info")
+        uvicorn.Config(
+            api,
+            host=settings.host,
+            port=settings.port,
+            log_level="info",
+            loop=uvicorn_loop_setting(),
+        )
     )
 
     def _serve() -> None:
@@ -52,23 +60,48 @@ def run_tray(settings: Settings) -> int:
     def on_open_docs(_icon: Any, _item: Any) -> None:
         open_url(f"{settings.website_url.rstrip('/')}/bridge/")
 
+    def on_open_printer(printer_id: str):
+        def _handler(_icon: Any, _item: Any) -> None:
+            open_url(
+                f"{settings.setup_url}?kind=printer&id={quote(printer_id, safe='')}"
+            )
+
+        return _handler
+
     def on_quit(icon: Any, _item: Any) -> None:
         server.should_exit = True
         icon.stop()
 
-    menu = pystray.Menu(
-        pystray.MenuItem("Open dashboard", on_open_dashboard),
-        pystray.MenuItem("Printers", on_open_setup),
-        pystray.MenuItem("Streamer.bot", on_open_integrations),
-        pystray.MenuItem("Documentation", on_open_docs),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem(
+    def menu_items():
+        """Rebuild on each open so newly added printers appear without a restart."""
+        yield pystray.MenuItem("Open dashboard", on_open_dashboard)
+        yield pystray.MenuItem("Printers", on_open_setup)
+        yield pystray.MenuItem("Documentation", on_open_docs)
+        yield pystray.Menu.SEPARATOR
+
+        try:
+            bridge.store.load()
+            printers = list(bridge.store.list())
+        except Exception:
+            logger.exception("Failed to load printers for tray menu")
+            printers = []
+
+        if not printers:
+            yield pystray.MenuItem("No printers yet", None, enabled=False)
+        else:
+            for instance in printers:
+                name = (instance.name or "").strip() or instance.id
+                yield pystray.MenuItem(name, on_open_printer(instance.id))
+
+        yield pystray.Menu.SEPARATOR
+        yield pystray.MenuItem(
             f"API {settings.base_url}",
             None,
             enabled=False,
-        ),
-        pystray.MenuItem("Quit", on_quit),
-    )
+        )
+        yield pystray.MenuItem("Quit", on_quit)
+
+    menu = pystray.Menu(menu_items)
     icon = pystray.Icon("kinkajou-bridge", image, "Kinkajou Bridge", menu)
     logger.info("Tray mode listening on %s", settings.base_url)
     icon.run()

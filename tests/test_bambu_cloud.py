@@ -45,3 +45,12 @@ def test_studio_headers() -> None:
     assert headers["Authorization"] == "Bearer abc.def.ghi"
     # Alias kept for compatibility with earlier browser-header naming.
     assert browser_headers("abc.def.ghi")["Authorization"] == "Bearer abc.def.ghi"
+
+
+def test_mqtt_broker_and_username() -> None:
+    from kinkajou_bridge.plugins.bambu.cloud import cloud_mqtt_username, mqtt_broker_for_region
+
+    assert mqtt_broker_for_region("global") == "us.mqtt.bambulab.com"
+    assert mqtt_broker_for_region("cn") == "cn.mqtt.bambulab.com"
+    assert cloud_mqtt_username("42") == "u_42"
+    assert cloud_mqtt_username("u_42") == "u_42"

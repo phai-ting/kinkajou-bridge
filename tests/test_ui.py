@@ -65,6 +65,23 @@ def test_welcome_and_setup_pages(tmp_path: Path) -> None:
         assert state.json()["welcome_completed"] is False
         assert state.json()["website_url"] == "https://kinkajou.dev"
         assert state.json()["docs_url"] == "https://kinkajou.dev/bridge/"
+        assert state.json()["custom_overlays_path"] == str(
+            tmp_path / "overlays" / "custom"
+        )
+
+        instructions = tmp_path / "overlays" / "custom" / "Put custom overlays here.txt"
+        assert instructions.is_file()
+        assert "bridge/custom" in instructions.read_text(encoding="utf-8")
+
+        demo = tmp_path / "overlays" / "custom" / "demo"
+        demo.mkdir()
+        (demo / "index.html").write_text(
+            "<!DOCTYPE html><title>demo</title><p>custom-ok</p>",
+            encoding="utf-8",
+        )
+        custom_page = client.get("/bridge/custom/demo/")
+        assert custom_page.status_code == 200
+        assert "custom-ok" in custom_page.text
 
         complete = client.post("/v1/ui/welcome/complete")
         assert complete.status_code == 200
