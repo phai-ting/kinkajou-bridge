@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard — Kinkajou Bridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/ui/static/app.css" />
+</head>
+<body>
+  <main class="shell">
+    <div class="nav">
+      <div class="brand">Kinkajou Bridge</div>
+      <div class="actions">
+        <a class="btn btn-primary" href="/ui/">Dashboard</a>
+        <a class="btn btn-secondary" href="/ui/setup?kind=service">Services</a>
+        <a class="btn btn-secondary" href="/ui/setup?kind=printer">Printers</a>
+        <a class="btn btn-secondary" href="/ui/setup?kind=integration">Streamer.bot</a>
+        <a class="btn btn-secondary" id="docs-link" href="https://kinkajou.dev/bridge/" target="_blank" rel="noreferrer" title="Opens in a new window">
+          Documentation
+          <svg class="btn-icon btn-icon-external" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M9.25 2a.75.75 0 0 0 0 1.5h2.19L6.22 8.72a.75.75 0 1 0 1.06 1.06l5.22-5.22V6.75a.75.75 0 0 0 1.5 0V2.75A.75.75 0 0 0 13.25 2H9.25ZM3.5 3.5A1.5 1.5 0 0 0 2 5v7.5A1.5 1.5 0 0 0 3.5 14H11a1.5 1.5 0 0 0 1.5-1.5V9.25a.75.75 0 0 0-1.5 0V12.5H3.5V5H6.75a.75.75 0 0 0 0-1.5H3.5Z"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="kicker"><span class="dot"></span> Local hub</div>
+      <h1>Dashboard</h1>
+      <p class="lead">
+        Services discover printers, printers report live status, and Streamer.bot receives
+        events from every printer — across all services and standalone hosts.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>Services</h2>
+      <div id="service-list" class="printer-grid"></div>
+      <p id="services-empty" class="muted" hidden>
+        No services yet. <a href="/ui/setup?kind=service">Connect one</a>.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>Printers</h2>
+      <div id="printer-list" class="printer-grid"></div>
+      <p id="empty" class="muted" hidden>
+        No printers yet. <a href="/ui/setup?kind=printer">Add one</a>.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>Streamer.bot</h2>
+      <div id="integration-list" class="printer-grid"></div>
+      <p id="integrations-empty" class="muted" hidden>
+        Not connected.
+        <a href="/ui/setup?kind=integration">Streamer.bot</a>
+        to forward events from all printers and services.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    function fmtTemp(value) {
+      if (value == null || Number.isNaN(Number(value))) return "—";
+      return `${Number(value).toFixed(1)}°C`;
+    }
+
+    function fmtProgress(job) {
+      if (!job || job.progress == null) return "—";
+      const pct = Number(job.progress).toFixed(0);
+      if (job.remaining_seconds == null) return `${pct}%`;
+      const mins = Math.max(0, Math.round(Number(job.remaining_seconds) / 60));
+      return `${pct}% · ~${mins} min left`;
+    }
+
+    function badgeClass(connection) {
+      if (connection === "connected") return "badge ok";
+      if (connection === "connecting") return "badge warn";
+      if (connection === "error") return "badge bad";
+      return "badge";
+    }
+
+    function renderSimpleCard(item) {
+      const status = item.status || {};
+      const connection = status.connection || "disconnected";
+      const card = document.createElement("article");
+      card.className = "printer-card";
+      card.innerHTML = `
+        <div class="printer-card-head">
+          <div>
+            <h3>${item.name}</h3>
+            <div class="muted">${item.plugin_id}</div>
+          </div>
+          <span class="${badgeClass(connection)}">${connection}</span>
+        </div>
+        ${status.message ? `<p class="status-note">${status.message}</p>` : ""}
+      `;
+      return card;
+    }
+
+    function renderIntegrationCard(item) {
+      const status = item.status || {};
+      const connection = status.connection || "disconnected";
+      const cfg = item.config || {};
+      const card = document.createElement("article");
+      card.className = "printer-card";
+      card.innerHTML = `
+        <div class="printer-card-head">
+          <div>
+            <h3>${item.name}</h3>
+            <div class="muted">${cfg.host || "—"}:${cfg.port || "—"}</div>
+          </div>
+          <span class="${badgeClass(connection)}">${connection}</span>
+        </div>
+        ${status.message ? `<p class="status-note">${status.message}</p>` : ""}
+        <div class="actions" style="margin-top: 0.75rem;">
+          <a class="btn btn-secondary" href="/ui/setup?kind=integration">View</a>
+        </div>
+      `;
+      return card;
+    }
+
+    function renderPrinter(printer) {
+      const status = printer.status || {};
+      const identity = printer.identity || {};
+      const temps = status.temperatures || {};
+      const job = status.job || {};
+      const connection = status.connection || "disconnected";
+      const printState = status.print_state || "unknown";
+      const mode = identity.connection_mode || "—";
+      const host = identity.host;
+      let modeLabel = String(mode).toUpperCase();
+      if (mode === "lan" && host) modeLabel = `LAN · ${host}`;
+      else if (mode === "service") modeLabel = "SERVICE";
+      if (printer.service_instance_id) modeLabel += " · linked";
+
+      const card = document.createElement("article");
+      card.className = "printer-card";
+      card.innerHTML = `
+        <div class="printer-card-head">
+          <div>
+            <h3>${printer.name}</h3>
+            <div class="muted">${printer.plugin_id} · ${modeLabel}</div>
+          </div>
+          <span class="${badgeClass(connection)}">${connection}</span>
+        </div>
+        <dl class="status-grid">
+          <div><dt>Print state</dt><dd>${printState}</dd></div>
+          <div><dt>Progress</dt><dd>${fmtProgress(job)}</dd></div>
+          <div><dt>Job</dt><dd>${job.name || "—"}</dd></div>
+          <div><dt>Nozzle</dt><dd>${fmtTemp(temps.nozzle_c)} / ${fmtTemp(temps.nozzle_target_c)}</dd></div>
+          <div><dt>Bed</dt><dd>${fmtTemp(temps.bed_c)} / ${fmtTemp(temps.bed_target_c)}</dd></div>
+        </dl>
+        ${status.message ? `<p class="status-note">${status.message}</p>` : ""}
+        <div class="actions" style="margin-top: 0.75rem;">
+          <a class="btn btn-secondary" href="/ui/setup?kind=printer&id=${encodeURIComponent(printer.id)}">Details</a>
+        </div>
+      `;
+      return card;
+    }
+
+    function fillList(listId, emptyId, items, render) {
+      const list = document.getElementById(listId);
+      const empty = document.getElementById(emptyId);
+      list.innerHTML = "";
+      if (!items.length) {
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+      for (const item of items) {
+        list.appendChild(render(item));
+      }
+    }
+
+    async function refresh() {
+      const stateRes = await fetch("/v1/ui/state");
+      const state = await stateRes.json();
+      document.getElementById("docs-link").href = state.docs_url || "https://kinkajou.dev/bridge/";
+
+      const [servicesRes, printersRes, integrationsRes] = await Promise.all([
+        fetch("/v1/services"),
+        fetch("/v1/printers"),
+        fetch("/v1/integrations"),
+      ]);
+      const serviceItems = servicesRes.ok ? await servicesRes.json() : [];
+      const printers = printersRes.ok ? await printersRes.json() : [];
+      const integrations = integrationsRes.ok ? await integrationsRes.json() : [];
+
+      fillList("service-list", "services-empty", serviceItems, renderSimpleCard);
+      fillList("printer-list", "empty", printers, renderPrinter);
+      fillList("integration-list", "integrations-empty", integrations, renderIntegrationCard);
+    }
+
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>

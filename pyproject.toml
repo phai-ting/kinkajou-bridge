@@ -1,0 +1,69 @@
+[project]
+name = "kinkajou-bridge"
+version = "0.1.0"
+description = "Local multi-printer hub for Streamer.bot and other tools (Project Kinkajou)."
+readme = "README.md"
+authors = [
+    { name = "Phai Ting", email = "phaiting@phaiting.com" },
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "websockets>=14.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "httpx>=0.28.0",
+    "curl-cffi>=0.7.0",
+    "pystray>=0.19.5",
+    "pillow>=11.0.0",
+]
+
+[project.optional-dependencies]
+windows = [
+    "pywin32>=308",
+]
+
+[project.scripts]
+kinkajou-bridge = "kinkajou_bridge.cli:main"
+
+[project.entry-points."kinkajou_bridge.services"]
+bambu_cloud = "kinkajou_bridge.plugins.bambu:BambuCloudService"
+
+[project.entry-points."kinkajou_bridge.printers"]
+bambu = "kinkajou_bridge.plugins.bambu:BambuPlugin"
+octoprint = "kinkajou_bridge.plugins.octoprint:OctoPrintPlugin"
+
+[project.entry-points."kinkajou_bridge.integrations"]
+streamerbot = "kinkajou_bridge.plugins.streamerbot:StreamerBotPlugin"
+
+# Legacy group — same as printers for older third-party packages.
+[project.entry-points."kinkajou_bridge.plugins"]
+bambu = "kinkajou_bridge.plugins.bambu:BambuPlugin"
+
+[build-system]
+requires = ["uv_build>=0.12.2,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+    "pyinstaller>=6.11.0",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

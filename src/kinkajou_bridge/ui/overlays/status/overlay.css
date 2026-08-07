@@ -1,0 +1,96 @@
+:root,
+html[data-theme="dark"] {
+  --text: #f2f6fb;
+  --muted: rgba(242, 246, 251, 0.72);
+  --panel: rgba(15, 18, 24, 0.72);
+  --border: rgba(168, 200, 239, 0.28);
+  --ok: #7ddea2;
+  --warn: #f0c674;
+  --bad: #f0a090;
+  --error-bg: rgba(40, 16, 12, 0.75);
+  --error-text: #ffd2ca;
+  --font: "Segoe UI", "Roboto", sans-serif;
+}
+
+html[data-theme="light"] {
+  --text: #1a2330;
+  --muted: rgba(26, 35, 48, 0.62);
+  --panel: rgba(255, 255, 255, 0.9);
+  --border: rgba(39, 49, 64, 0.18);
+  --ok: #1f8a55;
+  --warn: #9a6b08;
+  --bad: #c04538;
+  --error-bg: rgba(255, 236, 232, 0.95);
+  --error-text: #8b3a2f;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+}
+
+.card {
+  margin: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  min-width: 260px;
+  max-width: 420px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.muted { color: var(--muted); font-size: 0.85rem; }
+
+.state {
+  margin-top: 0.65rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+
+.message { margin-top: 0.45rem; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.badge.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
+
+.error {
+  margin: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent);
+  background: var(--error-bg);
+  color: var(--error-text);
+  max-width: 420px;
+  font-size: 0.9rem;
+}

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kinkajou Bridge — Overview</title>
+  <script>
+    (function () {
+      var t = (new URLSearchParams(location.search).get("theme") || "dark").toLowerCase();
+      document.documentElement.dataset.theme = t === "light" ? "light" : "dark";
+    })();
+  </script>
+  <link rel="stylesheet" href="./overlay.css" />
+</head>
+<body>
+  <div id="root" class="card" hidden>
+    <div class="row">
+      <div>
+        <div id="name" class="title">—</div>
+        <div id="plugin" class="muted">—</div>
+      </div>
+      <div class="badges">
+        <span id="connection" class="badge">…</span>
+        <span id="print-state" class="badge state-unknown">…</span>
+      </div>
+    </div>
+
+    <div id="job" class="job">—</div>
+
+    <div class="bar" aria-hidden="true">
+      <div id="fill" class="fill"></div>
+    </div>
+    <div class="row metrics">
+      <div id="pct" class="pct">—</div>
+      <div id="layers" class="muted">—</div>
+    </div>
+
+    <dl class="times">
+      <div><dt>Elapsed</dt><dd id="elapsed">—</dd></div>
+      <div><dt>Remaining</dt><dd id="remaining">—</dd></div>
+      <div><dt>Est. total</dt><dd id="total">—</dd></div>
+    </dl>
+
+    <div class="temps">
+      <div><span class="muted">Nozzle</span> <span id="nozzle">—</span></div>
+      <div><span class="muted">Bed</span> <span id="bed">—</span></div>
+    </div>
+  </div>
+  <div id="error" class="error" hidden></div>
+  <script src="../_shared/bridge-client.js"></script>
+  <script src="./overlay.js"></script>
+</body>
+</html>

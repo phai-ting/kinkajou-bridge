@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Printers — Kinkajou Bridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/ui/static/app.css" />
+</head>
+<body>
+  <main class="shell">
+    <div class="nav">
+      <div class="brand">Kinkajou Bridge</div>
+      <div class="actions" id="kind-switch">
+        <a class="btn btn-secondary" href="/ui/">Dashboard</a>
+        <a class="btn btn-secondary" id="link-service" href="/ui/setup?kind=service">Services</a>
+        <a class="btn btn-secondary" id="link-printer" href="/ui/setup?kind=printer">Printers</a>
+        <a class="btn btn-secondary" id="link-integration" href="/ui/setup?kind=integration">Streamer.bot</a>
+        <a class="btn btn-secondary" id="docs-link" href="https://kinkajou.dev/bridge/" target="_blank" rel="noreferrer" title="Opens in a new window">
+          Documentation
+          <svg class="btn-icon btn-icon-external" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M9.25 2a.75.75 0 0 0 0 1.5h2.19L6.22 8.72a.75.75 0 1 0 1.06 1.06l5.22-5.22V6.75a.75.75 0 0 0 1.5 0V2.75A.75.75 0 0 0 13.25 2H9.25ZM3.5 3.5A1.5 1.5 0 0 0 2 5v7.5A1.5 1.5 0 0 0 3.5 14H11a1.5 1.5 0 0 0 1.5-1.5V9.25a.75.75 0 0 0-1.5 0V12.5H3.5V5H6.75a.75.75 0 0 0 0-1.5H3.5Z"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="kicker"><span class="dot"></span> <span id="hero-kicker">Setup</span></div>
+      <h1 id="hero-title">Add a printer</h1>
+      <p class="lead" id="hero-lead">
+        Connect a cloud service once, then add printers from that account — or add a local / LAN printer.
+      </p>
+    </section>
+
+    <section class="panel" id="printer-list-panel" hidden>
+      <div class="panel-head">
+        <h2>Your printers</h2>
+        <button type="button" class="btn btn-primary" id="add-printer-btn">Add printer</button>
+      </div>
+      <div id="printer-setup-list" class="printer-grid"></div>
+      <p id="printer-list-message" class="status-note" hidden></p>
+    </section>
+
+    <section class="panel" id="printer-detail-panel" hidden>
+      <div class="panel-head">
+        <h2 id="printer-detail-title">Printer</h2>
+        <span id="printer-detail-badge" class="badge">disconnected</span>
+      </div>
+      <p id="printer-detail-subtitle" class="muted" style="margin: 0 0 1rem;"></p>
+      <dl id="printer-detail-grid" class="status-grid"></dl>
+      <p id="printer-detail-message" class="status-note" hidden></p>
+
+      <div id="printer-connect-box" class="connect-box">
+        <h3>Connect overlays &amp; Streamer.bot</h3>
+        <p class="muted" style="margin: 0 0 0.85rem;">
+          Use this printer’s id in OBS Browser Sources and Streamer.bot action args.
+          Overlay links below are served by Bridge on this PC (same origin as the API),
+          which avoids browser prompts about accessing other apps on your device.
+          One OBS source per printer lets you lay out multiple printers independently.
+        </p>
+        <dl class="status-grid">
+          <div>
+            <dt>Printer id</dt>
+            <dd>
+              <code id="printer-connect-id" class="mono">—</code>
+              <button type="button" class="btn btn-secondary btn-inline" id="copy-printer-id-btn">
+                Copy
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt>HTTP API</dt>
+            <dd><code id="printer-connect-api" class="mono">—</code></dd>
+          </div>
+          <div>
+            <dt>Events WebSocket</dt>
+            <dd><code id="printer-connect-ws" class="mono">—</code></dd>
+          </div>
+          <div>
+            <dt>Streamer.bot</dt>
+            <dd id="printer-connect-sb">
+              Actions are named <code class="mono">Kinkajou.{event_type}</code>.
+              Args include <code class="mono">printer_id</code> matching the id above.
+            </dd>
+          </div>
+        </dl>
+        <div class="stack" style="margin-top: 0.85rem;">
+          <div>
+            <div class="muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">
+              Overview overlay
+            </div>
+            <a id="printer-overlay-overview" class="mono link-break" href="#" target="_blank" rel="noreferrer">—</a>
+          </div>
+          <div>
+            <div class="muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">
+              Compact overlay
+            </div>
+            <a id="printer-overlay-compact" class="mono link-break" href="#" target="_blank" rel="noreferrer">—</a>
+          </div>
+        </div>
+        <p class="status-note" style="margin-top: 0.75rem;">
+          Overlay docs:
+          <a id="printer-overlays-docs" href="https://kinkajou.dev/bridge/user/overlays/" target="_blank" rel="noreferrer">
+            kinkajou.dev/bridge/user/overlays
+          </a>
+        </p>
+      </div>
+
+      <div class="actions" style="margin-top: 1rem;">
+        <button type="button" class="btn btn-secondary" id="back-to-printer-list-btn">
+          Back to printers
+        </button>
+        <button type="button" class="btn btn-danger" id="remove-printer-btn">
+          Remove printer
+        </button>
+      </div>
+    </section>
+
+    <section class="panel" id="printer-source-panel" hidden>
+      <div class="panel-head">
+        <h2>How do you want to add this printer?</h2>
+        <button type="button" class="btn btn-secondary" id="cancel-add-printer-btn" hidden>
+          Back to printers
+        </button>
+      </div>
+      <p class="muted" style="margin: 0 0 1rem;">
+        Choose a path first. You can change this later by starting over.
+      </p>
+      <div class="choice-grid">
+        <button type="button" class="choice-card" id="choose-cloud" data-source="service">
+          <strong>Cloud via service</strong>
+          <span class="muted" id="choose-cloud-hint">
+            Pick a connected account (for example Bambu Lab) and add a printer from that service.
+          </span>
+        </button>
+        <button type="button" class="choice-card" id="choose-standalone" data-source="lan">
+          <strong>Standalone / LAN</strong>
+          <span class="muted">
+            Connect directly on your network — Bambu LAN, OctoPrint, and similar hosts.
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <section class="panel" id="printer-type-panel" hidden>
+      <div class="panel-head">
+        <h2>Which printer type?</h2>
+        <button type="button" class="btn btn-secondary" id="back-to-source-from-type">
+          Change path
+        </button>
+      </div>
+      <p class="muted" style="margin: 0 0 1rem;">
+        Pick the integration that matches how this printer is connected.
+      </p>
+      <div class="choice-grid" id="printer-type-choices"></div>
+    </section>
+
+    <section class="panel" id="service-status-panel" hidden>
+      <div class="panel-head">
+        <h2 id="service-status-title">Bambu Lab</h2>
+        <span id="service-status-badge" class="badge">disconnected</span>
+      </div>
+      <dl id="service-config-view" class="status-grid"></dl>
+      <p id="service-status-message" class="status-note" hidden></p>
+      <div class="actions" style="margin-top: 1rem;">
+        <button type="button" class="btn btn-secondary" id="disconnect-service-btn">
+          Disconnect
+        </button>
+      </div>
+    </section>
+
+    <section class="panel" id="integration-status-panel" hidden>
+      <div class="panel-head">
+        <h2>Connection</h2>
+        <span id="integration-status-badge" class="badge">disconnected</span>
+      </div>
+      <dl id="integration-config-view" class="status-grid"></dl>
+      <p id="integration-status-message" class="status-note" hidden></p>
+      <div class="actions" style="margin-top: 1rem;">
+        <button type="button" class="btn btn-primary" id="edit-integration-btn">Edit connection</button>
+      </div>
+    </section>
+
+    <section class="panel" id="setup-panel">
+      <div class="panel-head">
+        <h2 id="panel-title">Connection</h2>
+        <button type="button" class="btn btn-secondary" id="back-to-source" hidden>
+          Back
+        </button>
+      </div>
+      <form id="setup-form" class="stack">
+        <input type="hidden" id="connection-mode" name="connection_mode" value="" />
+        <input type="hidden" id="plugin-id" name="plugin_id" value="" />
+        <div id="plugin-label" hidden>
+          <span id="plugin-label-text">Printer plugin</span>
+        </div>
+        <div id="selected-type-banner" class="schema-hint" hidden></div>
+        <div id="dynamic-fields" class="stack"></div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit" id="submit-btn">Save</button>
+          <button class="btn btn-secondary" type="button" id="cancel-edit-btn" hidden>Cancel</button>
+        </div>
+        <div id="setup-help" class="setup-help" hidden></div>
+        <div id="message" hidden class="msg"></div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/ui/static/setup.js"></script>
+</body>
+</html>

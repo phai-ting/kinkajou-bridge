@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kinkajou Bridge — Status</title>
+  <script>
+    (function () {
+      var t = (new URLSearchParams(location.search).get("theme") || "dark").toLowerCase();
+      document.documentElement.dataset.theme = t === "light" ? "light" : "dark";
+    })();
+  </script>
+  <link rel="stylesheet" href="./overlay.css" />
+</head>
+<body>
+  <div id="root" class="card" hidden>
+    <div class="row">
+      <div>
+        <div id="name" class="title">—</div>
+        <div id="plugin" class="muted">—</div>
+      </div>
+      <span id="connection" class="badge">…</span>
+    </div>
+    <div id="print-state" class="state">—</div>
+    <div id="message" class="muted message" hidden></div>
+  </div>
+  <div id="error" class="error" hidden></div>
+  <script src="../_shared/bridge-client.js"></script>
+  <script src="./overlay.js"></script>
+</body>
+</html>
