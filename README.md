@@ -101,7 +101,45 @@ A single package can register into one or more groups. Configure Streamer.bot fr
 (`/ui/setup?kind=integration`) rather than env vars; legacy
 `KINKAJOU_BRIDGE_STREAMERBOT_*` settings still migrate into an integration on first start.
 
-## Packaging
+## Packaging (Windows EXE)
 
-PyInstaller is available in the dev group for embedding a Python runtime in the
-Windows tray/service build (spec to be added when the app is closer to shippable).
+Bridge ships as a **zipped one-folder** build (same idea as Streamer.bot): unzip and
+run `KinkajouBridge.exe`. Build **on Windows** with PyInstaller.
+
+```powershell
+cd D:\Development\workspace_kinkajou\Kinkajou-Bridge
+uv sync
+uv run pyinstaller KinkajouBridge.spec
+```
+
+Output:
+
+| Path | Purpose |
+| --- | --- |
+| `dist/KinkajouBridge/` | Folder to zip for users |
+| `dist/KinkajouBridge/KinkajouBridge.exe` | Double-click entry point (tray + API) |
+
+Zip example:
+
+```powershell
+Compress-Archive -Path dist\KinkajouBridge\* -DestinationPath dist\KinkajouBridge-0.1.0-windows.zip
+```
+
+User config stays in `%USERPROFILE%\.kinkajou-bridge\` (not inside the zip), so
+replacing the folder with a newer build keeps printers and settings.
+
+### Smoke-test the EXE
+
+1. Run `dist\KinkajouBridge\KinkajouBridge.exe` — tray icon appears.
+2. Open the dashboard / setup UI.
+3. Confirm overlays load (e.g. `/bridge/overview/`).
+4. Confirm Bambu, OctoPrint, and Streamer.bot still appear in setup.
+
+If a freeze misses a lazy import, add a `--hidden-import` (or extend
+`hiddenimports` in `KinkajouBridge.spec`) and rebuild.
+
+Notes:
+
+- `--windowed` / `console=False` avoids a console flash; use file logging under the
+  data dir when debugging packaged builds.
+- Unsigned builds may trigger Windows SmartScreen until you code-sign.

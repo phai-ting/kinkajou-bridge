@@ -5,7 +5,9 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# Keep the checked-in Windows packaging spec; ignore ad-hoc local specs.
 *.spec
+!KinkajouBridge.spec
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
