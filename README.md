@@ -161,3 +161,6 @@ Notes:
 - Redistributed builds must keep `THIRD_PARTY_NOTICES.md` and
   `third_party_licenses/` (especially **pystray** under LGPLv3). See
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- Icons live under `src/kinkajou_bridge/ui/assets/`:
+  - `tray-icon.png` — system tray (loaded at runtime)
+  - `app-icon.ico` — Windows EXE / Explorer icon (set in `KinkajouBridge.spec`)

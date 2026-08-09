@@ -60,6 +60,10 @@ datas += [
     ("LICENSE", "."),
     ("THIRD_PARTY_NOTICES.md", "."),
     ("third_party_licenses", "third_party_licenses"),
+    (
+        "src/kinkajou_bridge/ui/assets/tray-icon.png",
+        "kinkajou_bridge/ui/assets",
+    ),
 ]
 
 a = Analysis(
@@ -93,6 +97,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon="src/kinkajou_bridge/ui/assets/app-icon.ico",
 )
 
 coll = COLLECT(

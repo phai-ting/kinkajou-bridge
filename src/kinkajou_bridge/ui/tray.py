@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -15,6 +16,28 @@ from kinkajou_bridge.ui.browser import open_url
 
 logger = logging.getLogger(__name__)
 
+_TRAY_ICON_PATH = Path(__file__).resolve().parent / "assets" / "tray-icon.png"
+
+
+def _load_tray_image():
+    """Load the packaged tray icon, or fall back to a simple generated mark."""
+    from PIL import Image, ImageDraw
+
+    if _TRAY_ICON_PATH.is_file():
+        try:
+            image = Image.open(_TRAY_ICON_PATH).convert("RGBA")
+            # Keep a crisp tray size across DPI; source may be larger (e.g. 256²).
+            if max(image.size) > 64:
+                image = image.resize((64, 64), Image.Resampling.LANCZOS)
+            return image
+        except Exception:
+            logger.exception("Failed to load tray icon from %s", _TRAY_ICON_PATH)
+
+    image = Image.new("RGBA", (64, 64), color=(32, 32, 36, 255))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((8, 8, 56, 56), fill=(79, 143, 217, 255))
+    return image
+
 
 def run_tray(settings: Settings) -> int:
     """Start the API in a background thread and show a system tray icon.
@@ -24,11 +47,17 @@ def run_tray(settings: Settings) -> int:
     """
     try:
         import pystray
-        from PIL import Image, ImageDraw
     except ImportError as exc:
         raise RuntimeError(
             "Tray mode requires pystray and pillow. Install project dependencies "
             "(see the Mac/Linux from-source docs), or run with --service."
+        ) from exc
+
+    try:
+        image = _load_tray_image()
+    except ImportError as exc:
+        raise RuntimeError(
+            "Tray mode requires pillow. Install project dependencies, or run with --service."
         ) from exc
 
     bridge = BridgeApp(settings)
@@ -48,10 +77,6 @@ def run_tray(settings: Settings) -> int:
 
     thread = threading.Thread(target=_serve, name="kinkajou-api", daemon=True)
     thread.start()
-
-    image = Image.new("RGB", (64, 64), color=(32, 32, 36))
-    draw = ImageDraw.Draw(image)
-    draw.ellipse((8, 8, 56, 56), fill=(79, 143, 217))
 
     def on_open_dashboard(_icon: Any, _item: Any) -> None:
         open_url(settings.dashboard_url)
