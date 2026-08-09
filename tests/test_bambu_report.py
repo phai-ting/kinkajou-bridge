@@ -3,6 +3,7 @@ from __future__ import annotations
 from kinkajou_bridge.models import (
     ConnectionState,
     EventType,
+    PrintJob,
     PrinterStatus,
     PrintState,
 )
@@ -78,20 +79,47 @@ def test_apply_print_snapshot_running_minutes_to_seconds() -> None:
     assert status.temperatures.bed_target_c == 65
 
 
-def test_progress_uses_layer_ratio_when_mc_percent_stalls() -> None:
+def test_progress_matches_mc_percent_not_layer_ratio() -> None:
     base = PrinterStatus(printer_id="dev", printer_name="P1S", plugin_id="bambu")
     status = apply_print_snapshot(
         base,
         {
             "gcode_state": "RUNNING",
-            "mc_percent": 33,
+            "mc_percent": 13,
             "mc_remaining_time": 40,
-            "layer_num": 120,
+            "layer_num": 42,
             "total_layer_num": 200,
         },
     )
-    # Layer ratio is 60%; take max so a stuck mc_percent does not freeze the UI.
-    assert status.job.progress == 60.0
+    # Match Bambu Studio (mc_percent), not layer_num/total_layer_num (~21%).
+    assert status.job.progress == 13.0
+
+
+def test_stale_full_layers_do_not_force_100_percent() -> None:
+    """After a finished job, layer_num==total must not pin the next print at 100%."""
+    status = apply_print_snapshot(
+        PrinterStatus(
+            printer_id="dev",
+            printer_name="P1S",
+            plugin_id="bambu",
+            print_state=PrintState.COMPLETE,
+            job=PrintJob(progress=100.0, elapsed_seconds=10000, total_seconds=10000),
+        ),
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 3,
+            "mc_remaining_time": 90,
+            "layer_num": 200,
+            "total_layer_num": 200,
+            "subtask_name": "next.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700000120.0,
+    )
+    assert status.print_state == PrintState.PRINTING
+    assert status.job.progress == 3.0
+    assert status.job.remaining_seconds == status.job.total_seconds - status.job.elapsed_seconds
+    assert status.job.progress < 50
 
 
 def test_elapsed_from_gcode_start_time() -> None:
@@ -129,9 +157,142 @@ def test_total_not_zeroed_when_remaining_hits_zero_before_100() -> None:
             "mc_remaining_time": 0,
         },
     )
-    assert near_end.job.remaining_seconds == 0
     assert near_end.job.total_seconds == prior.job.total_seconds
     assert near_end.job.total_seconds != 0
+    # Remaining follows total - elapsed (not Bambu's premature 0).
+    assert near_end.job.remaining_seconds == (
+        near_end.job.total_seconds - near_end.job.elapsed_seconds
+    )
+    assert near_end.job.remaining_seconds > 0
+
+
+def test_active_print_timing_never_decreases() -> None:
+    """Bambu remaining/percent can jitter; UI fields must stay monotonic mid-job."""
+    first = apply_print_snapshot(
+        PrinterStatus(printer_id="dev", printer_name="P1S", plugin_id="bambu"),
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 40,
+            "mc_remaining_time": 60,
+            "subtask_name": "benchy.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700001200.0,  # elapsed 20m, remaining 60m → total 80m
+    )
+    assert first.job.progress == 40
+    assert first.job.elapsed_seconds == 1200
+    assert first.job.total_seconds == 1200 + 3600
+
+    # Printer reports worse estimates / lower percent — keep prior highs.
+    jitter = apply_print_snapshot(
+        first,
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 35,
+            "mc_remaining_time": 45,
+            "subtask_name": "benchy.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700001500.0,  # elapsed advanced to 25m
+    )
+    assert jitter.job.progress == 40  # not 35
+    assert jitter.job.elapsed_seconds == 1500
+    # Raw total would be 25m+45m=70m (< prior 80m); clamp keeps 80m.
+    assert jitter.job.total_seconds == first.job.total_seconds
+
+    # Forward movement still allowed.
+    later = apply_print_snapshot(
+        jitter,
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 55,
+            "mc_remaining_time": 50,
+            "subtask_name": "benchy.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700002400.0,  # elapsed 40m + remaining 50m = 90m total
+    )
+    assert later.job.progress == 55
+    assert later.job.elapsed_seconds == 2400
+    assert later.job.total_seconds == 2400 + 3000
+    assert later.job.remaining_seconds == later.job.total_seconds - later.job.elapsed_seconds
+
+
+def test_new_print_resets_monotonic_clamp() -> None:
+    done = apply_print_snapshot(
+        PrinterStatus(printer_id="dev", printer_name="P1S", plugin_id="bambu"),
+        {
+            "gcode_state": "FINISH",
+            "mc_percent": 100,
+            "mc_remaining_time": 0,
+            "subtask_name": "old.3mf",
+        },
+    )
+    assert done.job.progress == 100
+
+    nxt = apply_print_snapshot(
+        done,
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 5,
+            "mc_remaining_time": 100,
+            "subtask_name": "new.3mf",
+        },
+    )
+    assert nxt.job.progress == 5
+    assert nxt.job.name == "new.3mf"
+
+
+def test_new_print_clears_stale_completion_from_merge() -> None:
+    """Partial RUNNING update must not keep the finished job's 100% forever."""
+    finished = merge_print_payload(
+        None,
+        {
+            "print": {
+                "gcode_state": "FINISH",
+                "mc_percent": 100,
+                "mc_remaining_time": 0,
+                "layer_num": 200,
+                "total_layer_num": 200,
+                "subtask_name": "benchy.3mf",
+                "gcode_start_time": "1700000000",
+            }
+        },
+    )
+    done_status = apply_print_snapshot(
+        PrinterStatus(printer_id="dev", printer_name="P1S", plugin_id="bambu"),
+        finished,
+    )
+    assert done_status.print_state == PrintState.COMPLETE
+    assert done_status.job.progress == 100
+
+    started = merge_print_payload(finished, {"print": {"gcode_state": "RUNNING"}})
+    assert "mc_percent" not in started
+    assert "gcode_start_time" not in started
+    assert "layer_num" not in started
+
+    live = apply_print_snapshot(done_status, started, now_ts=1700005000.0)
+    assert live.print_state == PrintState.PRINTING
+    assert live.job.progress == 0.0
+    assert live.job.elapsed_seconds is None or live.job.elapsed_seconds == 0
+
+    with_fresh = merge_print_payload(
+        started,
+        {
+            "print": {
+                "mc_percent": 8,
+                "mc_remaining_time": 90,
+                "layer_num": 10,
+                "total_layer_num": 200,
+                "gcode_start_time": "1700004900",
+            }
+        },
+    )
+    progressing = apply_print_snapshot(live, with_fresh, now_ts=1700005000.0)
+    assert progressing.job.progress == 8
+    assert progressing.job.remaining_seconds == 5400
+    assert progressing.job.elapsed_seconds == 100
+    assert progressing.job.total_seconds == 100 + 5400
 
 
 def test_apply_print_snapshot_idle() -> None:

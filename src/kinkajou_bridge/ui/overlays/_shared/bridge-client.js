@@ -92,11 +92,19 @@
   /**
    * Fill missing elapsed / total / remaining from progress when possible.
    * Bridge plugins should send these fields; derivation is a fallback.
+   *
+   * When total is known, remaining is derived from total - elapsed so the
+   * local 1s tick cannot make elapsed and remaining fight each other.
    */
   function normalizeJobTimes(job, opts) {
     const now = (opts && opts.now) || Date.now();
     const remainingAnchor = opts && opts.remainingAnchor;
     const elapsedAnchor = opts && opts.elapsedAnchor;
+    const printState = String((opts && opts.printState) || "").toLowerCase();
+    const ticking =
+      printState === "printing" ||
+      printState === "preparing" ||
+      printState === "";
     const raw = job || {};
     let progress = raw.progress != null ? Number(raw.progress) : null;
     if (progress != null && (Number.isNaN(progress) || progress < 0)) progress = null;
@@ -107,13 +115,17 @@
     let elapsed = raw.elapsed_seconds != null ? Number(raw.elapsed_seconds) : null;
     let total = raw.total_seconds != null ? Number(raw.total_seconds) : null;
 
-    if (remainingAnchor && remainingAnchor.remaining != null) {
+    if (ticking && remainingAnchor && remainingAnchor.remaining != null) {
       const drift = (now - remainingAnchor.at) / 1000;
       remaining = Math.max(0, Math.round(remainingAnchor.remaining - drift));
+    } else if (!ticking && remainingAnchor && remainingAnchor.remaining != null) {
+      remaining = Math.max(0, Math.round(remainingAnchor.remaining));
     }
-    if (elapsedAnchor && elapsedAnchor.elapsed != null) {
+    if (ticking && elapsedAnchor && elapsedAnchor.elapsed != null) {
       const drift = (now - elapsedAnchor.at) / 1000;
       elapsed = Math.max(0, Math.round(elapsedAnchor.elapsed + drift));
+    } else if (!ticking && elapsedAnchor && elapsedAnchor.elapsed != null) {
+      elapsed = Math.max(0, Math.round(elapsedAnchor.elapsed));
     }
 
     if (total == null && elapsed != null && remaining != null && remaining > 0) {
@@ -136,7 +148,10 @@
     if (elapsed == null && total != null && remaining != null) {
       elapsed = Math.max(0, total - remaining);
     }
-    if (remaining == null && total != null && elapsed != null) {
+    // Prefer a single clock: remaining tracks elapsed against a fixed total.
+    if (total != null && elapsed != null) {
+      remaining = Math.max(0, total - elapsed);
+    } else if (remaining == null && total != null && elapsed != null) {
       remaining = Math.max(0, total - elapsed);
     }
     if (
@@ -162,14 +177,12 @@
 
   function formatDuration(seconds) {
     if (seconds == null || Number.isNaN(Number(seconds))) return "—";
-    let s = Math.max(0, Math.round(Number(seconds)));
-    const h = Math.floor(s / 3600);
-    s %= 3600;
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
-    if (m > 0) return `${m}m ${String(sec).padStart(2, "0")}s`;
-    return `${sec}s`;
+    // Estimates are coarse (Bambu remaining is minutes); omit seconds to avoid flicker.
+    let mins = Math.max(0, Math.round(Number(seconds) / 60));
+    const h = Math.floor(mins / 60);
+    mins %= 60;
+    if (h > 0) return `${h}h ${String(mins).padStart(2, "0")}m`;
+    return `${mins}m`;
   }
 
   function badgeClass(connection) {
@@ -193,7 +206,7 @@
 
   /**
    * Live printer subscription: HTTP bootstrap + WebSocket refresh triggers,
-   * with local 1s countdown for remaining / elapsed between Bridge updates.
+   * with a low-rate local tick for remaining / elapsed between Bridge updates.
    */
   function watchPrinter(handlers) {
     const onUpdate = handlers && handlers.onUpdate;
@@ -221,6 +234,7 @@
       const job = normalizeJobTimes(status && status.job, {
         remainingAnchor,
         elapsedAnchor,
+        printState: status && status.print_state,
       });
       const base = { ...(status || {}), job };
       // Don't keep advertising printer "connected" when we can't reach Bridge.
@@ -234,21 +248,53 @@
       });
     }
 
+    function projectedElapsed(now) {
+      if (!elapsedAnchor || elapsedAnchor.elapsed == null) return null;
+      const t = now != null ? now : Date.now();
+      return Math.max(
+        0,
+        Math.round(elapsedAnchor.elapsed + (t - elapsedAnchor.at) / 1000)
+      );
+    }
+
     function setStatus(next) {
       status = next || {};
       bridgeReachable = true;
       const job = status.job || {};
-      if (job.remaining_seconds != null) {
-        remainingAnchor = {
-          remaining: Number(job.remaining_seconds),
-          at: Date.now(),
-        };
+      const state = String(status.print_state || "").toLowerCase();
+      const active =
+        state === "printing" || state === "preparing" || state === "paused";
+      const now = Date.now();
+
+      let elapsed =
+        job.elapsed_seconds != null ? Number(job.elapsed_seconds) : null;
+      let total = job.total_seconds != null ? Number(job.total_seconds) : null;
+      let remaining =
+        job.remaining_seconds != null ? Number(job.remaining_seconds) : null;
+
+      // Don't let a Bridge refresh pull elapsed back behind the smooth local tick.
+      if (active && elapsed != null) {
+        const projected = projectedElapsed(now);
+        if (projected != null) elapsed = Math.max(elapsed, projected);
       }
-      if (job.elapsed_seconds != null) {
-        elapsedAnchor = {
-          elapsed: Number(job.elapsed_seconds),
-          at: Date.now(),
-        };
+      if (active && total != null && elapsedAnchor && elapsedAnchor.total != null) {
+        total = Math.max(total, Number(elapsedAnchor.total));
+      }
+
+      if (elapsed != null) {
+        elapsedAnchor = { elapsed, at: now, total: total };
+      } else {
+        elapsedAnchor = null;
+      }
+
+      // One clock: remaining = total - elapsed when total is known.
+      if (total != null && elapsed != null) {
+        remaining = Math.max(0, total - elapsed);
+        remainingAnchor = { remaining, at: now, total };
+      } else if (remaining != null) {
+        remainingAnchor = { remaining, at: now, total: null };
+      } else {
+        remainingAnchor = null;
       }
       emit();
     }
@@ -345,7 +391,8 @@
 
     refresh();
     connectWs();
-    tickTimer = setInterval(emit, 1000);
+    // Display is minute-resolution; no need to repaint every second.
+    tickTimer = setInterval(emit, 15000);
     // HTTP poll so progress keeps moving even if WS events are sparse.
     pollTimer = setInterval(() => {
       if (!closed) refresh();

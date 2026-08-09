@@ -36,10 +36,8 @@
       fillEl.style.width = `${pct}%`;
     }
 
-    const elapsed = KinkajouBridge.formatDuration(job.elapsed_seconds);
     const remaining = KinkajouBridge.formatDuration(job.remaining_seconds);
-    const total = KinkajouBridge.formatDuration(job.total_seconds);
-    timesEl.textContent = `${elapsed} · ${remaining} left · ${total} total`;
+    timesEl.textContent = remaining === "—" ? "—" : `−${remaining}`;
   }
 
   KinkajouBridge.watchPrinter({
