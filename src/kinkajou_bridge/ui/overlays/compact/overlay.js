@@ -3,6 +3,7 @@
   const errorEl = document.getElementById("error");
   const nameEl = document.getElementById("name");
   const stateEl = document.getElementById("print-state");
+  const jobEl = document.getElementById("job");
   const fillEl = document.getElementById("fill");
   const pctEl = document.getElementById("pct");
   const timesEl = document.getElementById("times");
@@ -26,6 +27,15 @@
     nameEl.textContent = printer.name || "Printer";
     stateEl.className = `badge ${KinkajouBridge.printStateClass(printState)}`;
     stateEl.textContent = printState;
+
+    const jobName = String(job.name || "").trim();
+    if (jobName) {
+      jobEl.hidden = false;
+      jobEl.textContent = jobName;
+    } else {
+      jobEl.hidden = true;
+      jobEl.textContent = "";
+    }
 
     if (job.progress == null || Number.isNaN(Number(job.progress))) {
       pctEl.textContent = "—";

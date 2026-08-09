@@ -101,6 +101,20 @@ html, body {
   text-overflow: ellipsis;
 }
 
+.job {
+  margin-top: 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job[hidden] {
+  display: none;
+}
+
 .bar {
   position: relative;
   margin-top: 0.45rem;
