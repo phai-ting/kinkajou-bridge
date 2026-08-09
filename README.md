@@ -16,6 +16,7 @@ Early scaffold:
 - Local HTTP API (`/v1/...`) and event WebSocket
 - Tray mode by default when a GUI session is available; `--service` for headless API-only
 - Packaged Windows zip; Mac/Linux run from source
+- Streamer.bot router export under [`streamerbot/`](streamerbot/) (`KinkajouBridge.sb`)
 
 ## Requirements
 

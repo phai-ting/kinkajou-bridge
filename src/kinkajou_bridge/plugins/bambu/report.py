@@ -371,33 +371,42 @@ def apply_print_snapshot(
             )
         elif remaining_seconds is not None:
             total_seconds = elapsed_seconds + remaining_seconds
-    elif progress is not None and remaining_seconds is not None and progress > 0:
-        frac_left = 1.0 - (progress / 100.0)
-        if remaining_seconds <= 0 and progress < 100:
-            # remaining/frac would become 0 and wipe the estimate near the end.
-            if starting_fresh_job:
-                elapsed_seconds = None
-                total_seconds = None
-            else:
-                elapsed_seconds = prev_job.elapsed_seconds
-                total_seconds = prev_job.total_seconds
-        elif frac_left > 0.001:
-            total_seconds = int(round(remaining_seconds / frac_left))
-            elapsed_seconds = max(0, total_seconds - remaining_seconds)
-            if total_seconds <= 0:
-                elapsed_seconds = None if starting_fresh_job else prev_job.elapsed_seconds
-                total_seconds = None if starting_fresh_job else prev_job.total_seconds
-        elif progress >= 100:
-            if starting_fresh_job:
-                elapsed_seconds = None
-                total_seconds = remaining_seconds
-            else:
-                elapsed_seconds = prev_job.elapsed_seconds
-                total_seconds = (
-                    (elapsed_seconds or 0) + remaining_seconds
-                    if elapsed_seconds is not None
-                    else remaining_seconds or prev_job.total_seconds
-                )
+    elif remaining_seconds is not None and remaining_seconds > 0:
+        # No usable start clock yet (common in the first moments of a job).
+        if progress is None or progress <= 0:
+            elapsed_seconds = 0 if elapsed_seconds is None else elapsed_seconds
+            total_seconds = elapsed_seconds + remaining_seconds
+        else:
+            frac_left = 1.0 - (progress / 100.0)
+            if remaining_seconds <= 0 and progress < 100:
+                # remaining/frac would become 0 and wipe the estimate near the end.
+                if starting_fresh_job:
+                    elapsed_seconds = None
+                    total_seconds = None
+                else:
+                    elapsed_seconds = prev_job.elapsed_seconds
+                    total_seconds = prev_job.total_seconds
+            elif frac_left > 0.001:
+                total_seconds = int(round(remaining_seconds / frac_left))
+                elapsed_seconds = max(0, total_seconds - remaining_seconds)
+                if total_seconds <= 0:
+                    elapsed_seconds = (
+                        None if starting_fresh_job else prev_job.elapsed_seconds
+                    )
+                    total_seconds = (
+                        None if starting_fresh_job else prev_job.total_seconds
+                    )
+            elif progress >= 100:
+                if starting_fresh_job:
+                    elapsed_seconds = None
+                    total_seconds = remaining_seconds
+                else:
+                    elapsed_seconds = prev_job.elapsed_seconds
+                    total_seconds = (
+                        (elapsed_seconds or 0) + remaining_seconds
+                        if elapsed_seconds is not None
+                        else remaining_seconds or prev_job.total_seconds
+                    )
 
     layer_current = _as_int(print_data.get("layer_num"))
     layer_total = _as_int(print_data.get("total_layer_num"))
@@ -453,6 +462,10 @@ def apply_print_snapshot(
                 total_seconds or 0,
                 elapsed_seconds + remaining_seconds,
             )
+        elif total_seconds is None:
+            # Start time not reported yet — treat remaining as the est. total.
+            elapsed_seconds = 0
+            total_seconds = remaining_seconds
     elif (
         print_state in _ACTIVE_PRINT_STATES
         and total_seconds is not None

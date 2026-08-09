@@ -1253,7 +1253,7 @@ function renderIntegrationStatus() {
   document.getElementById("hero-title").textContent = "Streamer.bot";
   setPageTitle("Streamer.bot");
   document.getElementById("hero-lead").textContent =
-    "Events from every printer become DoAction calls named Kinkajou.{event_type}.";
+    "Events from every printer call the Kinkajou Bridge action with event_name (for example Kinkajou - Print Started).";
   document.getElementById("panel-title").textContent = "Streamer.bot";
   startIntegrationStatusPolling();
 }
@@ -1312,7 +1312,7 @@ function applyKindCopy() {
     integration: {
       kicker: "Streamer.bot",
       title: "Streamer.bot",
-      lead: "One Streamer.bot connection for Bridge. Events from every printer — any cloud service or standalone host — become DoAction calls named Kinkajou.{event_type}.",
+      lead: "One Streamer.bot connection for Bridge. Events from every printer — any cloud service or standalone host — call the Kinkajou Bridge action with event_name (for example Kinkajou - Print Started).",
       panel: "Streamer.bot",
       submit: "Save connection",
       plugin: "Integration",

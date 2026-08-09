@@ -14,6 +14,7 @@ from kinkajou_bridge.models import (
     PrinterEvent,
 )
 from kinkajou_bridge.plugins.base import VerifyResult
+from kinkajou_bridge.streamerbot.actions import ROUTER_ACTION_NAME, user_action_name
 from kinkajou_bridge.streamerbot.client import StreamerBotClient
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,8 @@ class StreamerBotPlugin:
             "Copy Address into Host (use 127.0.0.1 when Bridge runs on the same PC — even if Address is 0.0.0.0).",
             "Copy Port and Endpoint into the matching fields (defaults are often 8080 and /).",
             "If Authentication is enabled, copy the Password; leave it blank otherwise.",
+            "Import the Kinkajou Streamer.bot export from the Bridge repo (streamerbot/KinkajouBridge.sb).",
+            "Create your own actions named like “Kinkajou - Print Started” for events you care about.",
         ],
         setup_help_url="https://docs.streamer.bot/api/websocket/guide/configuration",
         test_connection=True,
@@ -134,24 +137,27 @@ class StreamerBotPlugin:
     async def handle_event(self, event: PrinterEvent) -> None:
         if self._client is None or self._client._ws is None:
             return
-        action_name = f"Kinkajou.{event.type.value}"
+        event_name = user_action_name(event.type)
         try:
             args: dict[str, Any] = {
                 "printer_id": event.printer_id,
                 "printer_name": event.printer_name,
                 "plugin_id": event.plugin_id,
                 "event_type": event.type.value,
+                "event_name": event_name,
                 **event.payload,
             }
-            await self._client.do_action(name=action_name, args=args)
+            await self._client.do_action(name=ROUTER_ACTION_NAME, args=args)
         except Exception:
             logger.exception(
-                "Failed to forward event to Streamer.bot action %s", action_name
+                "Failed to forward event to Streamer.bot action %s (%s)",
+                ROUTER_ACTION_NAME,
+                event_name,
             )
             self._status = self._status.model_copy(
                 update={
                     "connection": ConnectionState.ERROR,
-                    "message": f"Failed to send DoAction {action_name}",
+                    "message": f"Failed to send DoAction {ROUTER_ACTION_NAME}",
                 }
             )
 
@@ -200,7 +206,7 @@ class StreamerBotPlugin:
                 "connection": ConnectionState.CONNECTED,
                 "message": (
                     f"Connected to {client.url}. Events from all printers "
-                    "(every service and standalone host) forward as Kinkajou.* actions."
+                    f"forward to the “{ROUTER_ACTION_NAME}” action."
                 ),
             }
         )

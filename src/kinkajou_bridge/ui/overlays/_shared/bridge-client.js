@@ -133,6 +133,17 @@
     if (total == null && elapsed != null && remaining != null && remaining > 0) {
       total = elapsed + remaining;
     }
+    // Early job: remaining is known but % is still 0 and elapsed/total missing.
+    if (
+      total == null &&
+      remaining != null &&
+      remaining > 0 &&
+      (elapsed == null || elapsed === 0) &&
+      (progress == null || progress <= 0)
+    ) {
+      elapsed = elapsed == null ? 0 : elapsed;
+      total = elapsed + remaining;
+    }
     if (
       total == null &&
       remaining != null &&

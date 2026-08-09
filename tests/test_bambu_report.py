@@ -95,6 +95,24 @@ def test_progress_matches_mc_percent_not_layer_ratio() -> None:
     assert status.job.progress == 13.0
 
 
+def test_early_job_remaining_fills_estimated_total() -> None:
+    """At 0% Bambu often has remaining before gcode_start_time is usable."""
+    status = apply_print_snapshot(
+        PrinterStatus(printer_id="dev", printer_name="H2S", plugin_id="bambu"),
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 0,
+            "mc_remaining_time": 358,
+            "layer_num": 0,
+            "total_layer_num": 850,
+            "subtask_name": "figure.3mf",
+        },
+    )
+    assert status.job.remaining_seconds == 358 * 60
+    assert status.job.elapsed_seconds == 0
+    assert status.job.total_seconds == 358 * 60
+
+
 def test_stale_full_layers_do_not_force_100_percent() -> None:
     """After a finished job, layer_num==total must not pin the next print at 100%."""
     status = apply_print_snapshot(

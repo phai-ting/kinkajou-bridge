@@ -47,7 +47,11 @@
     }
 
     const remaining = KinkajouBridge.formatDuration(job.remaining_seconds);
-    timesEl.textContent = remaining === "—" ? "—" : `−${remaining}`;
+    if (remaining === "—" || remaining === "0m") {
+      timesEl.textContent = remaining;
+    } else {
+      timesEl.textContent = `−${remaining}`;
+    }
   }
 
   KinkajouBridge.watchPrinter({
