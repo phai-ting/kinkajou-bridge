@@ -17,13 +17,18 @@ logger = logging.getLogger(__name__)
 
 
 def run_tray(settings: Settings) -> int:
-    """Start the API in a background thread and show a system tray icon."""
+    """Start the API in a background thread and show a system tray icon.
+
+    Raises ``RuntimeError`` when tray dependencies or the tray backend are
+    unavailable so callers can fall back to headless mode.
+    """
     try:
         import pystray
         from PIL import Image, ImageDraw
     except ImportError as exc:
-        raise SystemExit(
-            "Tray mode requires pystray and pillow. Install project dependencies first."
+        raise RuntimeError(
+            "Tray mode requires pystray and pillow. Install project dependencies "
+            "(see the Mac/Linux from-source docs), or run with --service."
         ) from exc
 
     bridge = BridgeApp(settings)
@@ -102,7 +107,22 @@ def run_tray(settings: Settings) -> int:
         yield pystray.MenuItem("Quit", on_quit)
 
     menu = pystray.Menu(menu_items)
-    icon = pystray.Icon("kinkajou-bridge", image, "Kinkajou Bridge", menu)
+    try:
+        icon = pystray.Icon("kinkajou-bridge", image, "Kinkajou Bridge", menu)
+    except Exception as exc:
+        server.should_exit = True
+        raise RuntimeError(
+            f"Could not create a system tray icon ({exc}). "
+            "On Linux, install AppIndicator support or run with --service."
+        ) from exc
+
     logger.info("Tray mode listening on %s", settings.base_url)
-    icon.run()
+    try:
+        icon.run()
+    except Exception as exc:
+        server.should_exit = True
+        raise RuntimeError(
+            f"System tray failed ({exc}). "
+            "On Linux headless or SSH sessions, use --service."
+        ) from exc
     return 0

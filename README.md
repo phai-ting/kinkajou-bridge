@@ -3,6 +3,8 @@
 Local multi-printer hub for Streamer.bot and other tools. Part of
 [Project Kinkajou](https://kinkajou.dev).
 
+**License:** [MIT](LICENSE)
+
 Documentation: https://kinkajou.dev/bridge/
 
 ## Status
@@ -12,29 +14,37 @@ Early scaffold:
 - Service, printer, and integration plugin contracts (entry points supported)
 - Built-in Bambu Lab cloud service + printer (MQTT); OctoPrint and Moonraker printers (REST polling); Streamer.bot integration
 - Local HTTP API (`/v1/...`) and event WebSocket
-- Tray mode by default; `--service` for headless API-only
+- Tray mode by default when a GUI session is available; `--service` for headless API-only
+- Packaged Windows zip; Mac/Linux run from source
 
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/)
-- Python **3.13** preferred (project requires `>=3.12`)
+- Python **3.12+** (**3.13** preferred)
 
 ## Setup
 
-```powershell
-cd D:\Development\workspace_kinkajou\Kinkajou-Bridge
+```bash
+git clone https://github.com/phai-ting/kinkajou-bridge.git
+cd kinkajou-bridge
 uv sync
 ```
 
 ## Run
 
-```powershell
-# System tray + API (default)
+```bash
+# System tray + API (default when a GUI session is available)
 uv run kinkajou-bridge
 
-# Headless API only (no tray) — useful for Windows Service / background runs
+# Headless API only (no tray) — servers, SSH, Linux without a display
 uv run kinkajou-bridge --service
 ```
+
+On Mac/Linux without a GUI session, Bridge starts headless automatically. Force tray with `--tray` if needed.
+
+Linux tray tip: install AppIndicator packages (for example `gir1.2-appindicator3-0.1` on Debian/Ubuntu) or use `--service` and open the UI in a browser.
+
+User docs: [Install from source (Mac / Linux)](https://kinkajou.dev/bridge/user/install-from-source/)
 
 UI routes:
 
@@ -50,18 +60,20 @@ UI routes:
 
 Default port **29067** is the NCBI taxonomy ID for the kinkajou (*Potos flavus*). Override if needed:
 
-```powershell
+```bash
 # CLI
 uv run kinkajou-bridge --port 9000
 
 # Environment
-$env:KINKAJOU_BRIDGE_PORT = "9000"
+export KINKAJOU_BRIDGE_PORT=9000
 uv run kinkajou-bridge
 ```
 
+Config and state: `~/.kinkajou-bridge/` (all platforms).
+
 ## Tests / lint
 
-```powershell
+```bash
 uv run pytest
 uv run ruff check src tests
 ```
@@ -118,6 +130,9 @@ Output:
 | --- | --- |
 | `dist/KinkajouBridge/` | Folder to zip for users |
 | `dist/KinkajouBridge/KinkajouBridge.exe` | Double-click entry point (tray + API) |
+| `dist/KinkajouBridge/LICENSE` | MIT license for Kinkajou Bridge |
+| `dist/KinkajouBridge/THIRD_PARTY_NOTICES.md` | Third-party copyright / license summary |
+| `dist/KinkajouBridge/third_party_licenses/` | Full license texts for bundled components |
 
 Zip example:
 
@@ -143,3 +158,6 @@ Notes:
 - `--windowed` / `console=False` avoids a console flash; use file logging under the
   data dir when debugging packaged builds.
 - Unsigned builds may trigger Windows SmartScreen until you code-sign.
+- Redistributed builds must keep `THIRD_PARTY_NOTICES.md` and
+  `third_party_licenses/` (especially **pystray** under LGPLv3). See
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

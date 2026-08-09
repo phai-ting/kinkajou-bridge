@@ -11,8 +11,11 @@ from kinkajou_bridge import __version__
 from kinkajou_bridge.api import create_api
 from kinkajou_bridge.app import BridgeApp
 from kinkajou_bridge.asyncio_loop import uvicorn_loop_setting
+from kinkajou_bridge.platform_ui import gui_session_available
 from kinkajou_bridge.settings import Settings
 from kinkajou_bridge.single_instance import acquire_single_instance
+
+logger = logging.getLogger(__name__)
 
 
 def _configure_asyncio() -> None:
@@ -33,12 +36,12 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--service",
         action="store_true",
-        help="Run headless (API only, no system tray). Default is system tray mode.",
+        help="Run headless (API only, no system tray). Default is system tray mode when a GUI is available.",
     )
     mode.add_argument(
         "--tray",
         action="store_true",
-        help="Run with a system tray icon (default).",
+        help="Run with a system tray icon (default when a GUI session is available).",
     )
     parser.add_argument(
         "--windows-service",
@@ -46,6 +49,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Windows service helper commands (not fully implemented yet).",
     )
     return parser
+
+
+def run_api_service(settings: Settings) -> int:
+    """Run the local HTTP API in the foreground (no tray)."""
+    bridge = BridgeApp(settings)
+    api = create_api(bridge)
+    uvicorn.run(
+        api,
+        host=settings.host,
+        port=settings.port,
+        log_level="info",
+        loop=uvicorn_loop_setting(),
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,29 +87,39 @@ def main(argv: list[str] | None = None) -> int:
     # One Bridge process per machine/user session (skip for --windows-service above).
     instance_lock = acquire_single_instance(settings.data_dir)
     if instance_lock is None:
-        logging.getLogger(__name__).info(
-            "Kinkajou Bridge is already running — opening the existing UI."
-        )
+        logger.info("Kinkajou Bridge is already running — opening the existing UI.")
         from kinkajou_bridge.ui.browser import open_url
 
         open_url(settings.dashboard_url)
         return 0
 
-    if args.service:
-        bridge = BridgeApp(settings)
-        api = create_api(bridge)
-        uvicorn.run(
-            api,
-            host=settings.host,
-            port=settings.port,
-            log_level="info",
-            loop=uvicorn_loop_setting(),
-        )
-        return 0
+    force_tray = bool(args.tray)
+    force_service = bool(args.service)
+    if force_service:
+        want_tray = False
+    elif force_tray:
+        want_tray = True
+    else:
+        want_tray = gui_session_available()
+        if not want_tray:
+            logger.info(
+                "No GUI session detected — starting headless (--service). "
+                "Pass --tray to force tray mode."
+            )
 
-    from kinkajou_bridge.ui.tray import run_tray
+    if want_tray:
+        from kinkajou_bridge.ui.tray import run_tray
 
-    return run_tray(settings)
+        try:
+            return run_tray(settings)
+        except Exception as exc:
+            if force_tray:
+                logger.error("Tray mode failed: %s", exc)
+                return 1
+            logger.warning("Tray mode failed (%s); falling back to --service.", exc)
+            return run_api_service(settings)
+
+    return run_api_service(settings)
 
 
 if __name__ == "__main__":

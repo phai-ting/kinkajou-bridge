@@ -6,6 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Phai Ting", email = "phaiting@phaiting.com" },
 ]
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",

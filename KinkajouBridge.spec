@@ -29,6 +29,9 @@ hiddenimports: list[str] = [
     "kinkajou_bridge.plugins.octoprint",
     "kinkajou_bridge.plugins.octoprint.plugin",
     "kinkajou_bridge.plugins.octoprint.status",
+    "kinkajou_bridge.plugins.moonraker",
+    "kinkajou_bridge.plugins.moonraker.plugin",
+    "kinkajou_bridge.plugins.moonraker.status",
     "kinkajou_bridge.plugins.streamerbot",
     "kinkajou_bridge.plugins.streamerbot.plugin",
     # Uvicorn lazy imports
@@ -51,6 +54,13 @@ for package in ("kinkajou_bridge", "uvicorn", "aiomqtt", "certifi"):
     hiddenimports += pkg_hidden
 
 datas += copy_metadata("kinkajou-bridge")
+
+# Attribution for redistributed third-party components (required for several licenses).
+datas += [
+    ("LICENSE", "."),
+    ("THIRD_PARTY_NOTICES.md", "."),
+    ("third_party_licenses", "third_party_licenses"),
+]
 
 a = Analysis(
     ["src/kinkajou_bridge/cli.py"],

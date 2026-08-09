@@ -57,10 +57,13 @@
     }
 
     if (job.layer_current != null && job.layer_total != null) {
+      layersEl.hidden = false;
       layersEl.textContent = `Layer ${job.layer_current} / ${job.layer_total}`;
     } else if (job.layer_current != null) {
+      layersEl.hidden = false;
       layersEl.textContent = `Layer ${job.layer_current}`;
     } else {
+      layersEl.hidden = true;
       layersEl.textContent = "";
     }
 
