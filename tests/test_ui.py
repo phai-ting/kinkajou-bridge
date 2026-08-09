@@ -27,6 +27,11 @@ def test_welcome_and_setup_pages(tmp_path: Path) -> None:
         assert "Documentation" in welcome.text
         assert "Project Kinkajou website" not in welcome.text
         assert 'href="https://kinkajou.dev/bridge/"' in welcome.text
+        assert 'href="/ui/static/favicon-32x32.png"' in welcome.text
+
+        favicon = client.get("/favicon.ico")
+        assert favicon.status_code == 200
+        assert favicon.headers["content-type"].startswith("image/")
 
         setup = client.get("/ui/setup")
         assert setup.status_code == 200

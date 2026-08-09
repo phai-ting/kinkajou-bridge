@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from kinkajou_bridge.app import BridgeApp
@@ -101,6 +101,20 @@ def create_api(bridge: BridgeApp) -> FastAPI:
         if bridge.should_show_welcome():
             return RedirectResponse(url="/ui/welcome")
         return RedirectResponse(url="/ui/")
+
+    @api.get("/favicon.ico", include_in_schema=False)
+    async def favicon_ico() -> FileResponse:
+        path = ui_root / "favicon.ico"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="Favicon missing")
+        return FileResponse(path, media_type="image/x-icon")
+
+    @api.get("/favicon.svg", include_in_schema=False)
+    async def favicon_svg() -> FileResponse:
+        path = ui_root / "favicon.svg"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="Favicon missing")
+        return FileResponse(path, media_type="image/svg+xml")
 
     @api.get("/ui")
     @api.get("/ui/")
