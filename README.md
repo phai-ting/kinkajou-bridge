@@ -10,7 +10,7 @@ Documentation: https://kinkajou.dev/bridge/
 Early scaffold:
 
 - Service, printer, and integration plugin contracts (entry points supported)
-- Built-in Bambu Lab cloud service + printer (MQTT); OctoPrint printer (REST polling); Streamer.bot integration
+- Built-in Bambu Lab cloud service + printer (MQTT); OctoPrint and Moonraker printers (REST polling); Streamer.bot integration
 - Local HTTP API (`/v1/...`) and event WebSocket
 - Tray mode by default; `--service` for headless API-only
 
@@ -133,7 +133,7 @@ replacing the folder with a newer build keeps printers and settings.
 1. Run `dist\KinkajouBridge\KinkajouBridge.exe` — tray icon appears.
 2. Open the dashboard / setup UI.
 3. Confirm overlays load (e.g. `/bridge/overview/`).
-4. Confirm Bambu, OctoPrint, and Streamer.bot still appear in setup.
+4. Confirm Bambu, OctoPrint, Moonraker, and Streamer.bot still appear in setup.
 
 If a freeze misses a lazy import, add a `--hidden-import` (or extend
 `hiddenimports` in `KinkajouBridge.spec`) and rebuild.

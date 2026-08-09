@@ -24,7 +24,11 @@ from kinkajou_bridge.models import (
 )
 from kinkajou_bridge.plugins.base import VerifyResult
 from kinkajou_bridge.plugins.bambu.report import ReportTracker
-from kinkajou_bridge.plugins.octoprint.status import build_status, normalize_base_url
+from kinkajou_bridge.plugins.moonraker.status import (
+    build_status,
+    normalize_base_url,
+    objects_query_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,25 +38,27 @@ _HTTP_TIMEOUT_S = 5.0
 _CONNECT_WAIT_S = 8.0
 
 
-class OctoPrintPlugin:
-    """OctoPrint host integration (REST polling for printer + job status)."""
+class MoonrakerPlugin:
+    """Moonraker / Klipper host integration (REST polling for printer + job status)."""
 
-    id = "octoprint"
-    name = "OctoPrint"
+    id = "moonraker"
+    name = "Moonraker (Klipper)"
     compatible_service_ids: Sequence[str] = ()
     supports_standalone = True
     config_schema = ConfigSchema(
-        id="octoprint",
-        title="OctoPrint",
-        description="Connect to an OctoPrint host on your network.",
+        id="moonraker",
+        title="Moonraker (Klipper)",
+        description=(
+            "Connect to a Moonraker API on your network (Fluidd, Mainsail, and many Klipper hosts)."
+        ),
         hint=(
-            "OctoPrint is a standalone host — no cloud service required. "
-            "Use the OctoPrint URL and an Application API key from OctoPrint settings."
+            "Use the Moonraker URL (often port 7125) and an API key unless this PC is a "
+            "trusted client in moonraker.conf."
         ),
         examples=[
-            "OctoPrint / OctoPi",
-            "many Creality printers with OctoPrint",
-            "DIY hosts running OctoPrint",
+            "Mainsail / Fluidd",
+            "Snapmaker U1 / Artisan (Moonraker)",
+            "Voron and other Klipper printers",
         ],
         test_connection=True,
         fields=[
@@ -61,34 +67,35 @@ class OctoPrintPlugin:
                 type=FieldType.STRING,
                 label="Display name",
                 required=True,
-                placeholder="Workshop Ender",
+                placeholder="Shop Voron",
                 hint="A friendly name shown in Kinkajou Bridge, Streamer.bot args, and overlays.",
             ),
             ConfigField(
                 key="base_url",
                 type=FieldType.STRING,
-                label="OctoPrint URL",
+                label="Moonraker URL",
                 required=True,
-                placeholder="http://192.168.1.40",
-                hint="Base URL of the OctoPrint web UI (include http:// or https://).",
+                placeholder="http://192.168.1.40:7125",
+                hint="Base URL of Moonraker (include http:// or https://; often port 7125).",
                 hint_detail=(
-                    "Open OctoPrint in a browser and copy the address from the bar "
-                    "(for example http://octopi.local or http://192.168.1.40).\n\n"
-                    "Do not include a trailing path like /api/ — "
-                    "Bridge will call the API itself.\n\n"
+                    "Open Fluidd or Mainsail and copy the host/port Moonraker uses, "
+                    "or use http://PRINTER_IP:7125.\n\n"
+                    "Do not include a path like /printer/ — Bridge calls the API itself.\n\n"
                     "Prefer a DHCP reservation or hostname so the address does not change."
                 ),
             ),
             ConfigField(
                 key="api_key",
                 type=FieldType.SECRET,
-                label="API key",
-                required=True,
-                hint="OctoPrint Application API key (Settings → API).",
+                label="API key (optional)",
+                required=False,
+                hint=(
+                    "Moonraker API key for untrusted clients. Leave blank if this PC is trusted."
+                ),
                 hint_detail=(
-                    "In OctoPrint: Settings → API → Application Keys / User API keys "
-                    "(wording varies by version).\n\n"
-                    "Create or copy a key with permission to read printer and job status.\n\n"
+                    "In Moonraker / Mainsail / Fluidd, copy the API key from authorization "
+                    "settings when Bridge is not listed as a trusted client.\n\n"
+                    "Trusted clients (configured in moonraker.conf) can omit the key.\n\n"
                     "Keep this private — it can control the printer if write access is granted."
                 ),
             ),
@@ -114,7 +121,7 @@ class OctoPrintPlugin:
         self._connect_wait = connect_wait_seconds
         self._status = PrinterStatus(
             printer_id="unassigned",
-            printer_name="OctoPrint",
+            printer_name="Moonraker",
             plugin_id=self.id,
             capabilities=PrinterCapabilities(thumbnail=False, live_stream=True, control=False),
         )
@@ -132,49 +139,58 @@ class OctoPrintPlugin:
         if not base_url:
             return VerifyResult(
                 ok=False,
-                message="OctoPrint URL must look like http://host or https://host.",
+                message="Moonraker URL must look like http://host:7125 or https://host.",
             )
-        if not api_key:
-            return VerifyResult(ok=False, message="API key is required.")
+
+        headers = {"Accept": "application/json"}
+        if api_key:
+            headers["X-Api-Key"] = api_key
 
         try:
             async with httpx.AsyncClient(
                 base_url=base_url,
-                headers={"X-Api-Key": api_key, "Accept": "application/json"},
+                headers=headers,
                 timeout=_HTTP_TIMEOUT_S,
             ) as client:
-                response = await client.get("/api/version")
+                response = await client.get("/server/info")
         except httpx.TimeoutException:
             return VerifyResult(
                 ok=False,
-                message=f"Timed out reaching OctoPrint at {base_url}.",
+                message=f"Timed out reaching Moonraker at {base_url}.",
             )
         except httpx.HTTPError as exc:
             return VerifyResult(
                 ok=False,
-                message=f"Could not reach OctoPrint at {base_url}: {exc}",
+                message=f"Could not reach Moonraker at {base_url}: {exc}",
             )
 
         if response.status_code in {401, 403}:
             return VerifyResult(
                 ok=False,
-                message="OctoPrint rejected the API key (unauthorized).",
+                message=(
+                    "Moonraker rejected the request (unauthorized). "
+                    "Add an API key or trust this PC in moonraker.conf."
+                ),
             )
         if response.status_code >= 400:
             return VerifyResult(
                 ok=False,
-                message=f"OctoPrint returned HTTP {response.status_code} for /api/version.",
+                message=f"Moonraker returned HTTP {response.status_code} for /server/info.",
             )
 
         try:
             payload = response.json()
         except ValueError:
             payload = {}
-        server = payload.get("server") or payload.get("text") or "unknown"
+        result = payload.get("result") if isinstance(payload, dict) else {}
+        if not isinstance(result, dict):
+            result = {}
+        version = result.get("moonraker_version") or result.get("klippy_connected")
+        label = f"Moonraker {version}" if version not in {None, True, False} else "Moonraker"
         return VerifyResult(
             ok=True,
-            message=f"Connected to OctoPrint ({server}) at {base_url}.",
-            details={"base_url": base_url, "server": server, "api": payload.get("api")},
+            message=f"Connected to {label} at {base_url}.",
+            details={"base_url": base_url, "server": result},
         )
 
     async def connect(self, config: Mapping[str, Any]) -> None:
@@ -186,7 +202,7 @@ class OctoPrintPlugin:
         self._connected_emitted = False
         self._session_active = True
 
-        name = str(config.get("name") or "OctoPrint")
+        name = str(config.get("name") or "Moonraker")
         base_url = normalize_base_url(str(config.get("base_url") or ""))
         api_key = str(config.get("api_key") or "").strip()
         stream_url = str(config.get("stream_url") or "").strip() or None
@@ -206,30 +222,34 @@ class OctoPrintPlugin:
                     protocol="mjpeg" if stream_url else None,
                     notes="URL only — Bridge does not re-encode the stream." if stream_url else None,
                 ),
-                "message": f"Connecting to OctoPrint at {base_url or 'unknown'}…",
+                "message": f"Connecting to Moonraker at {base_url or 'unknown'}…",
             }
         )
 
-        if not base_url or not api_key:
+        if not base_url:
             self._session_active = False
             self._status = self._status.model_copy(
                 update={
                     "connection": ConnectionState.ERROR,
-                    "message": "OctoPrint URL and API key are required.",
+                    "message": "Moonraker URL is required.",
                 }
             )
-            self._enqueue_error("OctoPrint URL and API key are required.")
+            self._enqueue_error("Moonraker URL is required.")
             self._event_queue.put_nowait(_EVENT_SENTINEL)
             return
 
+        headers = {"Accept": "application/json"}
+        if api_key:
+            headers["X-Api-Key"] = api_key
+
         self._client = httpx.AsyncClient(
             base_url=base_url,
-            headers={"X-Api-Key": api_key, "Accept": "application/json"},
+            headers=headers,
             timeout=_HTTP_TIMEOUT_S,
         )
         self._poll_task = asyncio.create_task(
             self._poll_loop(),
-            name=f"octoprint-poll-{printer_id}",
+            name=f"moonraker-poll-{printer_id}",
         )
 
         deadline = time.monotonic() + self._connect_wait
@@ -251,7 +271,7 @@ class OctoPrintPlugin:
             except asyncio.CancelledError:
                 pass
             except Exception:
-                logger.debug("OctoPrint poll task error during disconnect", exc_info=True)
+                logger.debug("Moonraker poll task error during disconnect", exc_info=True)
 
         client = self._client
         self._client = None
@@ -292,29 +312,31 @@ class OctoPrintPlugin:
         stream_url = str(self._config.get("stream_url") or "").strip() or None
         name = self._status.printer_name
         printer_id = self._status.printer_id
+        query_path = objects_query_path()
 
         while not self._stop.is_set():
             try:
-                printer_resp, job_resp = await asyncio.gather(
-                    self._client.get("/api/printer"),
-                    self._client.get("/api/job"),
-                )
-                if printer_resp.status_code in {401, 403} or job_resp.status_code in {401, 403}:
-                    raise PermissionError("OctoPrint rejected the API key (unauthorized).")
-                printer_resp.raise_for_status()
-                job_resp.raise_for_status()
-                printer_payload = printer_resp.json()
-                job_payload = job_resp.json()
+                response = await self._client.get(query_path)
+                if response.status_code in {401, 403}:
+                    raise PermissionError(
+                        "Moonraker rejected the request (unauthorized). "
+                        "Add an API key or trust this PC."
+                    )
+                response.raise_for_status()
+                payload = response.json()
+                result = payload.get("result") if isinstance(payload, dict) else {}
+                objects = result.get("status") if isinstance(result, dict) else {}
+                if not isinstance(objects, dict):
+                    objects = {}
 
                 previous = self._status
                 next_status = build_status(
                     printer_id=printer_id,
                     printer_name=name,
                     plugin_id=self.id,
-                    printer_payload=printer_payload if isinstance(printer_payload, dict) else {},
-                    job_payload=job_payload if isinstance(job_payload, dict) else {},
+                    objects=objects,
                     stream_url=stream_url,
-                    message=f"Live via OctoPrint at {base_url}",
+                    message=f"Live via Moonraker at {base_url}",
                 )
                 events = self._tracker.events_for_update(
                     printer_id=printer_id,
@@ -343,12 +365,12 @@ class OctoPrintPlugin:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.warning("OctoPrint poll failed (%s): %s", base_url, exc)
+                logger.warning("Moonraker poll failed (%s): %s", base_url, exc)
                 self._status = self._status.model_copy(
                     update={
                         "connection": ConnectionState.ERROR,
                         "message": (
-                            f"OctoPrint unreachable at {base_url}: {exc}. "
+                            f"Moonraker unreachable at {base_url}: {exc}. "
                             f"Retrying every {int(self._poll_interval)}s."
                         ),
                     }

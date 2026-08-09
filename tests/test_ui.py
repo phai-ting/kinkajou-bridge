@@ -47,7 +47,8 @@ def test_welcome_and_setup_pages(tmp_path: Path) -> None:
         assert "watchPrinter" in client_js.text
         assert 'id="choose-cloud"' in setup.text
         assert "Standalone / LAN" in setup.text
-        assert "Which printer type?" in setup.text
+        assert "How does this printer talk to the network?" in setup.text
+        assert "Which type do I pick?" in setup.text
 
         setup_service = client.get("/ui/setup?kind=service")
         assert setup_service.status_code == 200
@@ -105,6 +106,9 @@ def test_service_and_printer_api_flow(tmp_path: Path) -> None:
         ids = {p["id"] for p in printer_plugins.json()}
         assert "bambu" in ids
         assert "octoprint" in ids
+        assert "moonraker" in ids
+        moon = next(p for p in printer_plugins.json() if p["id"] == "moonraker")
+        assert "Snapmaker U1 / Artisan (Moonraker)" in moon["config_schema"]["examples"]
 
         created = client.post(
             "/v1/services",

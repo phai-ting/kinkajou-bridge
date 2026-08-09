@@ -139,7 +139,7 @@
         <button type="button" class="choice-card" id="choose-standalone" data-source="lan">
           <strong>Standalone / LAN</strong>
           <span class="muted">
-            Connect directly on your network — Bambu LAN, OctoPrint, and similar hosts.
+            Connect directly on your network — Bambu LAN, OctoPrint, Moonraker / Klipper, and similar hosts.
           </span>
         </button>
       </div>
@@ -147,13 +147,15 @@
 
     <section class="panel" id="printer-type-panel" hidden>
       <div class="panel-head">
-        <h2>Which printer type?</h2>
+        <h2>How does this printer talk to the network?</h2>
         <button type="button" class="btn btn-secondary" id="back-to-source-from-type">
           Change path
         </button>
       </div>
       <p class="muted" style="margin: 0 0 1rem;">
-        Pick the integration that matches how this printer is connected.
+        Pick the host software or protocol Bridge should use — not necessarily the brand on the
+        machine. Examples under each card list common products. Not sure?
+        See <a href="https://kinkajou.dev/bridge/user/printers/" target="_blank" rel="noreferrer">Which type do I pick?</a>
       </p>
       <div class="choice-grid" id="printer-type-choices"></div>
     </section>

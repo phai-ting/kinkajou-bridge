@@ -543,12 +543,30 @@ function renderTypeChoices() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "choice-card";
-    btn.innerHTML = `<strong>${plugin.name}</strong><span class="muted">${
-      plugin.config_schema.description || plugin.config_schema.hint || ""
-    }</span>`;
+    const schema = plugin.config_schema || {};
+    const description = schema.description || schema.hint || "";
+    const examples = Array.isArray(schema.examples)
+      ? schema.examples.filter((item) => String(item || "").trim())
+      : [];
+    const examplesHtml = examples.length
+      ? `<span class="choice-examples muted">Examples: ${examples
+          .map((item) => escapeHtml(String(item)))
+          .join(" · ")}</span>`
+      : "";
+    btn.innerHTML = `<strong>${escapeHtml(plugin.name)}</strong><span class="muted">${escapeHtml(
+      description
+    )}</span>${examplesHtml}`;
     btn.addEventListener("click", () => setPrinterType(plugin.id));
     container.appendChild(btn);
   }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function setPrinterSource(source) {
@@ -564,8 +582,8 @@ function setPrinterSource(source) {
   document.getElementById("connection-mode").value = source;
   document.getElementById("hero-lead").textContent =
     source === "service"
-      ? "Choose which printer type to add from a connected service."
-      : "Choose which kind of standalone printer you are connecting.";
+      ? "Choose which printer protocol to use with a connected service."
+      : "Choose which host software this printer uses on your network.";
   renderTypeChoices();
 }
 

@@ -41,6 +41,8 @@ class ConfigSchema(BaseModel):
     title: str
     description: str = ""
     hint: str | None = None
+    # Brand / product names shown on Add Printer type cards for discoverability.
+    examples: list[str] = Field(default_factory=list)
     setup_help: list[str] = Field(default_factory=list)
     setup_help_url: str | None = None
     fields: list[ConfigField] = Field(default_factory=list)

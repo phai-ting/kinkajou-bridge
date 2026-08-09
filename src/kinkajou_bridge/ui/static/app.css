@@ -192,6 +192,12 @@ h1 {
   font-size: 1rem;
 }
 
+.choice-examples {
+  display: block;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 .muted { color: var(--muted); }
 
 .stack { display: grid; gap: 0.85rem; }

@@ -217,6 +217,10 @@ class BambuPlugin:
             "Prefer Cloud via service after connecting the Bambu Lab service. "
             "Use LAN mode only if the printer is in LAN Only / Developer Mode."
         ),
+        examples=[
+            "Bambu Lab X1 / P1 / A1 / H2",
+            "Bambu cloud or LAN mode",
+        ],
         test_connection=True,
         fields=[
             ConfigField(

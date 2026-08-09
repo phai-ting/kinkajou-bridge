@@ -13,6 +13,7 @@ from kinkajou_bridge.models import (
 )
 from kinkajou_bridge.plugins.bambu import BambuCloudService, BambuPlugin
 from kinkajou_bridge.plugins.base import IntegrationPlugin, PrinterPlugin, ServicePlugin
+from kinkajou_bridge.plugins.moonraker import MoonrakerPlugin
 from kinkajou_bridge.plugins.octoprint import OctoPrintPlugin
 from kinkajou_bridge.plugins.registry import (
     IntegrationRegistry,
@@ -68,6 +69,7 @@ class BridgeApp:
             [
                 ("bambu", BambuPlugin),
                 ("octoprint", OctoPrintPlugin),
+                ("moonraker", MoonrakerPlugin),
             ]
         )
         self.integration_registry.load_builtins([("streamerbot", StreamerBotPlugin)])

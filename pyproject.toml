@@ -34,6 +34,7 @@ bambu_cloud = "kinkajou_bridge.plugins.bambu:BambuCloudService"
 [project.entry-points."kinkajou_bridge.printers"]
 bambu = "kinkajou_bridge.plugins.bambu:BambuPlugin"
 octoprint = "kinkajou_bridge.plugins.octoprint:OctoPrintPlugin"
+moonraker = "kinkajou_bridge.plugins.moonraker:MoonrakerPlugin"
 
 [project.entry-points."kinkajou_bridge.integrations"]
 streamerbot = "kinkajou_bridge.plugins.streamerbot:StreamerBotPlugin"
