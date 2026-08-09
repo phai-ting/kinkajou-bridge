@@ -166,6 +166,43 @@ def test_total_not_zeroed_when_remaining_hits_zero_before_100() -> None:
     assert near_end.job.remaining_seconds > 0
 
 
+def test_remaining_not_zero_when_layers_remain() -> None:
+    prior = apply_print_snapshot(
+        PrinterStatus(printer_id="dev", printer_name="H2S", plugin_id="bambu"),
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 90,
+            "mc_remaining_time": 30,
+            "layer_num": 700,
+            "total_layer_num": 850,
+            "subtask_name": "figure.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700001800.0,
+    )
+    assert prior.job.remaining_seconds == 1800
+
+    # Bambu often reports 0 remaining before the last layer.
+    stuck = apply_print_snapshot(
+        prior,
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 92,
+            "mc_remaining_time": 0,
+            "layer_num": 720,
+            "total_layer_num": 850,
+            "subtask_name": "figure.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700002000.0,
+    )
+    assert stuck.job.progress == 92
+    assert stuck.job.layer_current == 720
+    assert stuck.job.layer_total == 850
+    assert stuck.job.remaining_seconds is not None
+    assert stuck.job.remaining_seconds > 0
+
+
 def test_active_print_timing_never_decreases() -> None:
     """Bambu remaining/percent can jitter; UI fields must stay monotonic mid-job."""
     first = apply_print_snapshot(
@@ -199,6 +236,8 @@ def test_active_print_timing_never_decreases() -> None:
     assert jitter.job.elapsed_seconds == 1500
     # Raw total would be 25m+45m=70m (< prior 80m); clamp keeps 80m.
     assert jitter.job.total_seconds == first.job.total_seconds
+    # Remaining still follows Bambu's positive estimate (not total - elapsed).
+    assert jitter.job.remaining_seconds == 45 * 60
 
     # Forward movement still allowed.
     later = apply_print_snapshot(
@@ -215,7 +254,80 @@ def test_active_print_timing_never_decreases() -> None:
     assert later.job.progress == 55
     assert later.job.elapsed_seconds == 2400
     assert later.job.total_seconds == 2400 + 3000
-    assert later.job.remaining_seconds == later.job.total_seconds - later.job.elapsed_seconds
+    assert later.job.remaining_seconds == 3000
+
+
+def test_prefers_positive_bambu_remaining_when_total_elapsed_would_zero() -> None:
+    """Do not wipe a healthy mc_remaining_time just to keep total-elapsed in sync."""
+    prior = apply_print_snapshot(
+        PrinterStatus(printer_id="dev", printer_name="P1S", plugin_id="bambu"),
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 90,
+            "mc_remaining_time": 30,
+            "subtask_name": "benchy.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700001800.0,  # 30m elapsed + 30m remaining
+    )
+    assert prior.job.remaining_seconds == 1800
+
+    # Elapsed catches the old total while Bambu still reports ~28 minutes left.
+    caught_up = prior.model_copy(
+        update={
+            "job": prior.job.model_copy(
+                update={
+                    "elapsed_seconds": prior.job.total_seconds,
+                    "remaining_seconds": 0,
+                }
+            )
+        }
+    )
+    fixed = apply_print_snapshot(
+        caught_up,
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 92,
+            "mc_remaining_time": 28,
+            "subtask_name": "benchy.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700000000.0 + (prior.job.total_seconds or 0),
+    )
+    assert fixed.job.remaining_seconds == 28 * 60
+    assert fixed.job.elapsed_seconds is not None
+    assert fixed.job.total_seconds == fixed.job.elapsed_seconds + fixed.job.remaining_seconds
+
+
+def test_start_time_jitter_does_not_reset_job_when_progress_holds() -> None:
+    first = apply_print_snapshot(
+        PrinterStatus(printer_id="dev", printer_name="P1S", plugin_id="bambu"),
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 50,
+            "mc_remaining_time": 40,
+            "subtask_name": "benchy.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700002400.0,
+    )
+    assert first.job.elapsed_seconds == 2400
+
+    # Bambu moves start forward by 10 minutes; progress is still mid-job.
+    jitter = apply_print_snapshot(
+        first,
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 52,
+            "mc_remaining_time": 38,
+            "subtask_name": "benchy.3mf",
+            "gcode_start_time": "1700000600",
+        },
+        now_ts=1700002400.0,
+    )
+    assert jitter.job.elapsed_seconds == 2400  # monotonic
+    assert jitter.job.remaining_seconds == 38 * 60
+    assert jitter.job.progress == 52
 
 
 def test_new_print_resets_monotonic_clamp() -> None:

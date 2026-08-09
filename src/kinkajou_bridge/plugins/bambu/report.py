@@ -193,6 +193,62 @@ def _monotonic_job_timing(
     return progress, elapsed_seconds, total_seconds
 
 
+def _not_on_last_layer(layer_current: int | None, layer_total: int | None) -> bool:
+    return (
+        layer_current is not None
+        and layer_total is not None
+        and layer_total > 0
+        and layer_current < layer_total
+    )
+
+
+def _rescue_premature_zero_remaining(
+    *,
+    print_state: PrintState,
+    remaining_seconds: int | None,
+    elapsed_seconds: int | None,
+    total_seconds: int | None,
+    progress: float | None,
+    layer_current: int | None,
+    layer_total: int | None,
+    previous: PrintJob,
+) -> tuple[int | None, int | None]:
+    """If layers remain, a 0 remaining estimate is not believable — recover one."""
+    if print_state not in _ACTIVE_PRINT_STATES:
+        return remaining_seconds, total_seconds
+    if remaining_seconds is None or remaining_seconds > 0:
+        return remaining_seconds, total_seconds
+    if not _not_on_last_layer(layer_current, layer_total):
+        return remaining_seconds, total_seconds
+
+    rescued: int | None = None
+    if previous.remaining_seconds is not None and previous.remaining_seconds > 0:
+        rescued = previous.remaining_seconds
+    if (
+        rescued is None
+        and total_seconds is not None
+        and elapsed_seconds is not None
+    ):
+        derived = max(0, total_seconds - elapsed_seconds)
+        if derived > 0:
+            rescued = derived
+    if (
+        rescued is None
+        and elapsed_seconds is not None
+        and progress is not None
+        and 0.5 < progress < 100.0
+    ):
+        rescued = max(60, int(round(elapsed_seconds * (100.0 - progress) / progress)))
+
+    if rescued is None or rescued <= 0:
+        # Prefer unknown over a confident-looking 0m while layers remain.
+        return None, total_seconds
+
+    if elapsed_seconds is not None:
+        total_seconds = max(total_seconds or 0, elapsed_seconds + rescued)
+    return rescued, total_seconds
+
+
 def _job_identity(print_data: dict[str, Any]) -> tuple[str | None, float | None]:
     return _job_name(print_data), _as_float(print_data.get("gcode_start_time"))
 
@@ -357,14 +413,22 @@ def apply_print_snapshot(
         previous_name=prev_job.name,
         next_name=name,
     )
-    # New print often keeps gcode_state=RUNNING; a sharply lower elapsed means new start.
+    # New print often keeps gcode_state=RUNNING; a sharply lower elapsed can mean
+    # a new start — but Bambu also revises gcode_start_time mid-job. Only treat it
+    # as a new job when progress also reset (or the name changed above).
     if (
         continuing
         and elapsed_seconds is not None
         and prev_job.elapsed_seconds is not None
         and elapsed_seconds + 300 < prev_job.elapsed_seconds
     ):
-        continuing = False
+        prev_progress = prev_job.progress
+        if (
+            progress is None
+            or prev_progress is None
+            or progress + 15 < prev_progress
+        ):
+            continuing = False
 
     if continuing:
         progress, elapsed_seconds, total_seconds = _monotonic_job_timing(
@@ -374,13 +438,38 @@ def apply_print_snapshot(
             total_seconds=total_seconds,
         )
 
-    # Keep the triad consistent so overlays can tick without ±1s fighting.
+    # Prefer Bambu's remaining estimate when it is positive. Deriving remaining
+    # only from total - elapsed zeroes the ETA whenever start/total estimates
+    # jitter while mc_remaining_time is still healthy.
+    reported_remaining = remaining_seconds
     if (
+        print_state in _ACTIVE_PRINT_STATES
+        and reported_remaining is not None
+        and reported_remaining > 0
+    ):
+        remaining_seconds = reported_remaining
+        if elapsed_seconds is not None:
+            total_seconds = max(
+                total_seconds or 0,
+                elapsed_seconds + remaining_seconds,
+            )
+    elif (
         print_state in _ACTIVE_PRINT_STATES
         and total_seconds is not None
         and elapsed_seconds is not None
     ):
         remaining_seconds = max(0, total_seconds - elapsed_seconds)
+
+    remaining_seconds, total_seconds = _rescue_premature_zero_remaining(
+        print_state=print_state,
+        remaining_seconds=remaining_seconds,
+        elapsed_seconds=elapsed_seconds,
+        total_seconds=total_seconds,
+        progress=progress,
+        layer_current=layer_current,
+        layer_total=layer_total,
+        previous=prev_job,
+    )
 
     progress = _reconcile_progress_with_timing(
         print_state=print_state,

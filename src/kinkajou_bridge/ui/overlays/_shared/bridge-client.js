@@ -93,8 +93,10 @@
    * Fill missing elapsed / total / remaining from progress when possible.
    * Bridge plugins should send these fields; derivation is a fallback.
    *
-   * When total is known, remaining is derived from total - elapsed so the
-   * local 1s tick cannot make elapsed and remaining fight each other.
+   * Remaining from Bridge (or the remaining anchor) is authoritative — do not
+   * recompute it as total - elapsed. Bambu revises start/total estimates often;
+   * deriving remaining from a ratcheted total zeroes the ETA while the printer
+   * still has tens of minutes left.
    */
   function normalizeJobTimes(job, opts) {
     const now = (opts && opts.now) || Date.now();
@@ -148,11 +150,53 @@
     if (elapsed == null && total != null && remaining != null) {
       elapsed = Math.max(0, total - remaining);
     }
-    // Prefer a single clock: remaining tracks elapsed against a fixed total.
-    if (total != null && elapsed != null) {
+    // Only derive remaining when Bridge/anchor did not provide one. If Bridge
+    // reported 0 early but total still exceeds elapsed, keep a sane ETA.
+    if (remaining == null && total != null && elapsed != null) {
       remaining = Math.max(0, total - elapsed);
-    } else if (remaining == null && total != null && elapsed != null) {
-      remaining = Math.max(0, total - elapsed);
+    } else if (
+      remaining === 0 &&
+      progress != null &&
+      progress < 100 &&
+      total != null &&
+      elapsed != null
+    ) {
+      const derived = Math.max(0, total - elapsed);
+      if (derived > 60) remaining = derived;
+    }
+    // Layers left ⇒ a hard 0m remaining is not believable.
+    const layerCurrent =
+      raw.layer_current != null ? Number(raw.layer_current) : null;
+    const layerTotal =
+      raw.layer_total != null ? Number(raw.layer_total) : null;
+    if (
+      remaining === 0 &&
+      layerCurrent != null &&
+      layerTotal != null &&
+      layerTotal > 0 &&
+      layerCurrent < layerTotal
+    ) {
+      if (total != null && elapsed != null) {
+        const derived = Math.max(0, total - elapsed);
+        if (derived > 0) remaining = derived;
+      }
+      if (
+        remaining === 0 &&
+        elapsed != null &&
+        progress != null &&
+        progress > 0.5 &&
+        progress < 100
+      ) {
+        remaining = Math.max(
+          60,
+          Math.round((elapsed * (100 - progress)) / progress)
+        );
+      }
+      if (remaining === 0) remaining = null;
+    }
+    // Keep total consistent with the remaining clock when both sides exist.
+    if (elapsed != null && remaining != null && remaining > 0) {
+      total = Math.max(total == null ? 0 : total, elapsed + remaining);
     }
     if (
       progress == null &&
@@ -272,13 +316,26 @@
       let remaining =
         job.remaining_seconds != null ? Number(job.remaining_seconds) : null;
 
-      // Don't let a Bridge refresh pull elapsed back behind the smooth local tick.
+      // Smooth small Bridge jitter, but fully resync when Bridge remaining is
+      // clearly ahead of our local clocks (avoids stuck 0m ETAs).
       if (active && elapsed != null) {
         const projected = projectedElapsed(now);
-        if (projected != null) elapsed = Math.max(elapsed, projected);
+        if (projected != null) {
+          const projectedRemaining =
+            total != null ? Math.max(0, total - projected) : null;
+          const bridgeAhead =
+            remaining != null &&
+            remaining > 90 &&
+            projectedRemaining != null &&
+            remaining > projectedRemaining + 90;
+          if (!bridgeAhead) {
+            elapsed = Math.max(elapsed, projected);
+          }
+        }
       }
-      if (active && total != null && elapsedAnchor && elapsedAnchor.total != null) {
-        total = Math.max(total, Number(elapsedAnchor.total));
+
+      if (elapsed != null && remaining != null && remaining > 0) {
+        total = Math.max(total == null ? 0 : total, elapsed + remaining);
       }
 
       if (elapsed != null) {
@@ -287,12 +344,12 @@
         elapsedAnchor = null;
       }
 
-      // One clock: remaining = total - elapsed when total is known.
-      if (total != null && elapsed != null) {
+      // Remaining from Bridge is the display clock; tick down between refreshes.
+      if (remaining != null) {
+        remainingAnchor = { remaining, at: now, total: total };
+      } else if (total != null && elapsed != null) {
         remaining = Math.max(0, total - elapsed);
         remainingAnchor = { remaining, at: now, total };
-      } else if (remaining != null) {
-        remainingAnchor = { remaining, at: now, total: null };
       } else {
         remainingAnchor = null;
       }
