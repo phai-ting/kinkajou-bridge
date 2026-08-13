@@ -202,6 +202,34 @@ def _not_on_last_layer(layer_current: int | None, layer_total: int | None) -> bo
     )
 
 
+def _clamp_remaining_increase(
+    *,
+    previous: PrintJob,
+    remaining_seconds: int | None,
+    progress: float | None,
+) -> int | None:
+    """Reject large remaining jumps upward, especially late in a job."""
+    if remaining_seconds is None:
+        return remaining_seconds
+    prev = previous.remaining_seconds
+    # Allow recovery when the last value was missing/zero (common after a
+    # premature Bambu 0) or when we are still early/mid-job.
+    if prev is None or prev <= 0:
+        return remaining_seconds
+    if remaining_seconds <= prev:
+        return remaining_seconds
+
+    # Late job: Bambu sometimes spikes ETA; keep the last good countdown.
+    # Mid-job: allow normal estimate revisions, only block extreme spikes.
+    if progress is not None and progress >= 85.0:
+        slack = 60
+    else:
+        slack = 15 * 60
+    if remaining_seconds > prev + slack:
+        return prev
+    return remaining_seconds
+
+
 def _rescue_premature_zero_remaining(
     *,
     print_state: PrintState,
@@ -221,27 +249,34 @@ def _rescue_premature_zero_remaining(
     if not _not_on_last_layer(layer_current, layer_total):
         return remaining_seconds, total_seconds
 
-    rescued: int | None = None
-    if previous.remaining_seconds is not None and previous.remaining_seconds > 0:
-        rescued = previous.remaining_seconds
-    if (
-        rescued is None
-        and total_seconds is not None
-        and elapsed_seconds is not None
-    ):
+    candidates: list[int] = []
+    if total_seconds is not None and elapsed_seconds is not None:
         derived = max(0, total_seconds - elapsed_seconds)
         if derived > 0:
-            rescued = derived
+            candidates.append(derived)
     if (
-        rescued is None
-        and elapsed_seconds is not None
+        elapsed_seconds is not None
         and progress is not None
         and 0.5 < progress < 100.0
     ):
-        rescued = max(60, int(round(elapsed_seconds * (100.0 - progress) / progress)))
+        candidates.append(
+            max(60, int(round(elapsed_seconds * (100.0 - progress) / progress)))
+        )
+    if previous.remaining_seconds is not None and previous.remaining_seconds > 0:
+        candidates.append(previous.remaining_seconds)
 
-    if rescued is None or rescued <= 0:
+    if not candidates:
         # Prefer unknown over a confident-looking 0m while layers remain.
+        return None, total_seconds
+
+    # Never rescue *above* the last good remaining — that is what caused
+    # near-end overlays to jump from ~2m back up to tens of minutes when
+    # Bambu reported 0 and total-elapsed still had slack.
+    rescued = min(candidates)
+    if previous.remaining_seconds is not None and previous.remaining_seconds > 0:
+        rescued = min(rescued, previous.remaining_seconds)
+
+    if rescued <= 0:
         return None, total_seconds
 
     if elapsed_seconds is not None:
@@ -471,7 +506,20 @@ def apply_print_snapshot(
         and total_seconds is not None
         and elapsed_seconds is not None
     ):
-        remaining_seconds = max(0, total_seconds - elapsed_seconds)
+        derived = max(0, total_seconds - elapsed_seconds)
+        prev_rem = prev_job.remaining_seconds
+        # Monotonic total can stay above elapsed + last ETA; do not let that
+        # slack inflate remaining when Bambu has already counted down.
+        if prev_rem is not None and prev_rem > 0:
+            remaining_seconds = min(derived, prev_rem)
+        else:
+            remaining_seconds = derived
+
+    remaining_seconds = _clamp_remaining_increase(
+        previous=prev_job,
+        remaining_seconds=remaining_seconds,
+        progress=progress,
+    )
 
     remaining_seconds, total_seconds = _rescue_premature_zero_remaining(
         print_state=print_state,

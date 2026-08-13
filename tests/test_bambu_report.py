@@ -219,6 +219,89 @@ def test_remaining_not_zero_when_layers_remain() -> None:
     assert stuck.job.layer_total == 850
     assert stuck.job.remaining_seconds is not None
     assert stuck.job.remaining_seconds > 0
+    # Must not jump back up above the last good ETA.
+    assert stuck.job.remaining_seconds <= prior.job.remaining_seconds
+
+
+def test_remaining_does_not_jump_up_when_bambu_hits_zero_with_total_slack() -> None:
+    """Sticky high total + mc_remaining 0 must not revive a large ETA near the end."""
+    prior = apply_print_snapshot(
+        PrinterStatus(printer_id="dev", printer_name="H2S", plugin_id="bambu"),
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 40,
+            "mc_remaining_time": 60,
+            "subtask_name": "figure.3mf",
+            "gcode_start_time": "1700000000",
+            "layer_num": 300,
+            "total_layer_num": 850,
+        },
+        now_ts=1700001200.0,  # elapsed 20m + remaining 60m = total 80m
+    )
+    assert prior.job.total_seconds == 4800
+
+    almost_done = apply_print_snapshot(
+        prior,
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 97,
+            "mc_remaining_time": 2,
+            "subtask_name": "figure.3mf",
+            "gcode_start_time": "1700000000",
+            "layer_num": 840,
+            "total_layer_num": 850,
+        },
+        now_ts=1700000000.0 + 4600,  # ~76.7m elapsed; bambu says 2m left
+    )
+    assert almost_done.job.remaining_seconds == 120
+    # Monotonic total stays high (slack vs elapsed+2m).
+    assert almost_done.job.total_seconds >= almost_done.job.elapsed_seconds + 120
+
+    zeroed = apply_print_snapshot(
+        almost_done,
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 98,
+            "mc_remaining_time": 0,
+            "subtask_name": "figure.3mf",
+            "gcode_start_time": "1700000000",
+            "layer_num": 845,
+            "total_layer_num": 850,
+        },
+        now_ts=1700000000.0 + 4650,
+    )
+    # Old bug: remaining became total-elapsed (~15m+). Must stay ≤ last good ETA.
+    assert zeroed.job.remaining_seconds is not None
+    assert zeroed.job.remaining_seconds <= 120
+    assert zeroed.job.remaining_seconds > 0
+
+
+def test_remaining_rejects_large_upward_bambu_jump_near_end() -> None:
+    prior = apply_print_snapshot(
+        PrinterStatus(printer_id="dev", printer_name="H2S", plugin_id="bambu"),
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 97,
+            "mc_remaining_time": 2,
+            "subtask_name": "figure.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700004600.0,
+    )
+    assert prior.job.remaining_seconds == 120
+
+    spiked = apply_print_snapshot(
+        prior,
+        {
+            "gcode_state": "RUNNING",
+            "mc_percent": 98,
+            "mc_remaining_time": 15,
+            "subtask_name": "figure.3mf",
+            "gcode_start_time": "1700000000",
+        },
+        now_ts=1700004650.0,
+    )
+    assert spiked.job.remaining_seconds == 120
 
 
 def test_active_print_timing_never_decreases() -> None:

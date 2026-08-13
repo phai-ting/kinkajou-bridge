@@ -1,0 +1,1 @@
+gh release create v0.1.0 dist\KinkajouBridge-0.1.0-windows-x64.zip --title "v0.1.0" --notes "First Windows build. Unzip and run KinkajouBridge.exe."

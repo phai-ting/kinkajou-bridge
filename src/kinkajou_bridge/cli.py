@@ -14,6 +14,7 @@ from kinkajou_bridge.asyncio_loop import uvicorn_loop_setting
 from kinkajou_bridge.platform_ui import gui_session_available
 from kinkajou_bridge.settings import Settings
 from kinkajou_bridge.single_instance import acquire_single_instance
+from kinkajou_bridge.stdio import ensure_stdio, uvicorn_use_colors
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +62,13 @@ def run_api_service(settings: Settings) -> int:
         port=settings.port,
         log_level="info",
         loop=uvicorn_loop_setting(),
+        use_colors=uvicorn_use_colors(),
     )
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
+    ensure_stdio()
     _configure_asyncio()
     args = build_parser().parse_args(argv)
     logging.basicConfig(

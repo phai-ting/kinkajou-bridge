@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kinkajou Bridge — Bar</title>
+  <script>
+    (function () {
+      var t = (new URLSearchParams(location.search).get("theme") || "dark").toLowerCase();
+      document.documentElement.dataset.theme = t === "light" ? "light" : "dark";
+    })();
+  </script>
+  <link rel="stylesheet" href="./overlay.css" />
+</head>
+<body>
+  <div id="root" class="strip" hidden data-state="unknown">
+    <div class="bar" aria-hidden="true">
+      <div id="fill" class="fill"></div>
+      <div class="bar-meta">
+        <span id="layers">—</span>
+        <span id="pct">—</span>
+        <span id="remaining">—</span>
+      </div>
+    </div>
+  </div>
+  <div id="error" class="error" hidden></div>
+  <script src="../_shared/bridge-client.js"></script>
+  <script src="./overlay.js"></script>
+</body>
+</html>

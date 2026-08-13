@@ -145,10 +145,6 @@ html, body {
   white-space: nowrap;
 }
 
-.card[data-state="complete"] .pct {
-  color: var(--ok);
-}
-
 .times {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -135,10 +135,16 @@ Output:
 | `dist/KinkajouBridge/THIRD_PARTY_NOTICES.md` | Third-party copyright / license summary |
 | `dist/KinkajouBridge/third_party_licenses/` | Full license texts for bundled components |
 
-Zip example:
+Zip example (run in **PowerShell**, not `cmd`):
 
 ```powershell
-Compress-Archive -Path dist\KinkajouBridge\* -DestinationPath dist\KinkajouBridge-0.1.0-windows.zip
+Compress-Archive -Path dist\KinkajouBridge\* -DestinationPath dist\KinkajouBridge-0.1.0-windows-x64.zip -Force
+```
+
+Or from `cmd` / `build.bat`:
+
+```bat
+powershell -NoProfile -Command "Compress-Archive -Path 'dist\KinkajouBridge\*' -DestinationPath 'dist\KinkajouBridge-0.1.0-windows-x64.zip' -Force"
 ```
 
 User config stays in `%USERPROFILE%\.kinkajou-bridge\` (not inside the zip), so

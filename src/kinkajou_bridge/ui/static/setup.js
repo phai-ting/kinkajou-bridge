@@ -906,6 +906,8 @@ function fillPrinterConnectInfo(printer) {
     `${apiBase}/bridge/overview/?printer=${encodeURIComponent(id)}`;
   const compactUrl =
     `${apiBase}/bridge/compact/?printer=${encodeURIComponent(id)}`;
+  const barUrl =
+    `${apiBase}/bridge/bar/?printer=${encodeURIComponent(id)}`;
 
   document.getElementById("printer-connect-id").textContent = id;
   document.getElementById("printer-connect-api").textContent = apiBase;
@@ -920,6 +922,11 @@ function fillPrinterConnectInfo(printer) {
   compact.href = compactUrl;
   compact.textContent = compactUrl;
   compact.removeAttribute("title");
+
+  const bar = document.getElementById("printer-overlay-bar");
+  bar.href = barUrl;
+  bar.textContent = barUrl;
+  bar.removeAttribute("title");
 
   const docs = document.getElementById("printer-overlays-docs");
   const docsUrl = overlaysDocsFromState();

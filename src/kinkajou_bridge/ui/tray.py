@@ -12,6 +12,7 @@ from kinkajou_bridge.api import create_api
 from kinkajou_bridge.app import BridgeApp
 from kinkajou_bridge.asyncio_loop import uvicorn_loop_setting
 from kinkajou_bridge.settings import Settings
+from kinkajou_bridge.stdio import uvicorn_use_colors
 from kinkajou_bridge.ui.browser import open_url
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ def run_tray(settings: Settings) -> int:
             port=settings.port,
             log_level="info",
             loop=uvicorn_loop_setting(),
+            use_colors=uvicorn_use_colors(),
         )
     )
 
